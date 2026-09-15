@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -21,7 +22,6 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.16.0",
     "eslint-config-next": "^16.3.5",
     "typescript": "^5.7.0",
@@ -30,5 +30,10 @@
   },
   "engines": {
     "node": ">=20.9.0"
+  },
+  "packageManager": "npm@11.17.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/The-Qwert-Qwert/creator-manager-poc.git"
   }
 }

@@ -5,7 +5,7 @@
 - **Date**: 2026-09-14
 - **Owner**: budigital
 - **Stable filename**: `docs/product-vision.md` (version lives here, not in filename)
-- **Pins**: FSD v1.0.0 at `docs/plans/2026-09-12-creator-analytics-fsd.md`, PoC Plan v0.2.1 at `docs/plans/2026-09-12-creator-analytics-phase1-implementation.md`
+- **Pins**: FSD v1.0.0 at `docs/plans/2026-09-12-creator-analytics-fsd.md`
 
 ---
 

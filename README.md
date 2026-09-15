@@ -1,23 +1,23 @@
 # Centralized Creator Analytics — scaffold
 
 One dashboard for YouTube, TikTok, Instagram, and Facebook audience numbers.
-See `docs/plans/` for the FSD and phasing docs this scaffold implements
-(FSD v1.0.0, §14 "Current phase — PoC").
+See `docs/` for the FSD (v1.0.0, §14 "Current phase — PoC"), the product vision
+and the post-PoC checklist.
 
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack by default) + **TypeScript** — UI, API routes, OAuth callbacks
-- **Vitest** — test runner (adapter contract tests, snapshot-job tests, metrics-math tests per FSD §13)
+- **Vitest** — test runner (adapter contract, snapshot-job and metrics-math suites land per FSD §13)
 - **Supabase free tier** — Postgres + Auth, added once the schema (FSD §7) lands
 
-Requires **Node.js ≥ 20.9.0** (Next.js 16 minimum).
+Requires **Node.js ≥ 20.9.0** (Next.js 16 minimum); `.nvmrc` pins 24.19.0.
 
 ## Getting started
 
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-npm test         # runs Vitest (empty suite for now, exits 0)
+npm test         # runs the Vitest suite
 ```
 
 Copy `.env.example` to `.env.local` and fill in values as adapters are built.
@@ -27,9 +27,10 @@ Nothing in this scaffold talks to Supabase or any platform API yet.
 
 ```
 app/            App Router pages, layouts, (later) API routes
-lib/            Adapters, DB client, snapshot logic — empty until built
-tests/          Vitest specs — empty until adapters/snapshot job exist
-docs/plans/     FSD, product vision, phasing docs (source of truth)
+lib/            token-crypto.ts built; adapters, DB client, snapshot logic land next
+tests/          Vitest specs — token-crypto.test.ts so far
+docs/plans/     FSD v1.0.0 — source of truth for scope and behavior
+docs/           Product vision, Post-PoC readiness checklist
 ```
 
 ## Scripts
@@ -38,11 +39,12 @@ docs/plans/     FSD, product vision, phasing docs (source of truth)
 |---|---|
 | `npm run dev` | Start the dev server |
 | `npm run build` / `npm start` | Production build / serve |
-| `npm test` | Run Vitest once (`--run`); passes on an empty suite |
+| `npm run lint` | ESLint via eslint-config-next |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Run Vitest once (`--run`) |
 | `npm run test:watch` | Vitest in watch mode |
-| `npm run lint` | Next.js ESLint |
 
 ## Status
 
 PoC phase (local-first, own accounts, no hosting/review submissions yet — see
-`docs/plans` and the Post-PoC Readiness Checklist for what's deferred).
+`docs/` for what's deferred).

@@ -5,7 +5,7 @@
 - **Date**: 2026-09-14
 - **Owner**: budigital
 - **Stable filename**: `docs/post-poc-checklist.md` (version lives here, not in filename)
-- **Pins**: FSD v1.0.0, Product Vision v0.1.0, PoC Plan v0.2.1
+- **Pins**: FSD v1.0.0, Product Vision v0.1.0
 - **Rule**: Do not start until PoC §14 done (4 connects work, snapshots idempotent, dashboard DB-only, reconnect banner works).
 
 ---
