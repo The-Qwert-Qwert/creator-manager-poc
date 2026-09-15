@@ -1,8 +1,8 @@
 # FSD: Centralized Creator Analytics
 
-- **Version**: 1.0.0
-- **Status**: Approved — baseline
-- **Current phase**: PoC — all four adapters, local-first, own accounts (see §14)
+- **Version**: 1.2.0
+- **Status**: Approved — baseline (amended 2026-09-15)
+- **Current phase**: PoC (hosted, ~zero cost) — all four adapters, dev-mode apps, owner accounts (see §14)
 - **Date**: 2026-09-12
 - **Owner**: budigital
 - **Working title**: centralized-analytics (product naming TBD)
@@ -45,7 +45,7 @@ The product exists because creators currently open 2–4 native apps, each with 
 
 1. **Sign up** — email magic link or Google sign-in. Minimal profile.
 2. **Connect platform** — dashboard shows four connect buttons. Each starts that platform's OAuth flow; success returns to dashboard with the new platform row. One platform is enough to be useful; connect more anytime.
-3. **Daily view** — user opens dashboard: combined audience number, delta vs 7 days ago, per-platform rows (logo, handle, audience, delta, last-updated). If history < 7 days, delta shows "—" with a "building history" note.
+3. **Daily view** — user opens dashboard: combined audience number, delta vs 7 days ago, per-platform rows (logo, handle, audience, delta, last-updated). If history < 8 days, delta shows "—" with a "building history" note.
 4. **Reconnect** — if a token dies, that platform's row shows a plain banner: "TikTok connection expired — reconnect". One click re-runs OAuth.
 5. **Disconnect / delete** — disconnect removes tokens and stops snapshots for that platform. Delete account purges everything, and a stub "data deletion" callback endpoint exists for Meta compliance.
 
@@ -58,7 +58,7 @@ The product exists because creators currently open 2–4 native apps, each with 
 | FR-3 | Daily snapshot job | Runs once daily (cron). Per active account: 1–2 adapter calls → one `metric_snapshots` row. Idempotent (unique account+date upsert). Failures isolated per account; batch continues. |
 | FR-4 | Dashboard | Renders solely from our DB. Combined audience + 7-day delta + per-platform rows. Never calls platform APIs on page load. |
 | FR-5 | Token lifecycle | Auto-refresh per platform rules (see §9). Mark `needs_reconnect` on failure; stop retrying; surface banner. |
-| FR-6 | Manual refresh | Optional button per account, rate-limited (≥1 hour between refreshes per account). Non-dashboard-triggered. |
+| FR-6 | Manual refresh | User-initiated button per account. Never fires on dashboard page load; server-enforced cooldown of ≥1 hour between refreshes per account. |
 | FR-7 | Gated-metric fallbacks | When a platform withholds a metric, show the best available numbers plus a plain-language note. No broken/empty widgets. |
 | FR-8 | Disconnect platform | Deletes tokens, stops snapshots, purges that account's history. Best-effort token revocation at platform where an endpoint exists. |
 | FR-9 | Delete account | Purges user + all accounts + snapshots. Meta data-deletion callback endpoint (signed request) + status URL. |
@@ -126,10 +126,10 @@ Why snapshots are the spine: TikTok exposes no historical API at all, Meta limit
 ## 9. Platform integration specs
 
 ### 9.1 YouTube (launch platform)
-- **Auth**: Google OAuth 2.0. Scopes: `youtube.readonly` (channels.list data) + `yt-analytics.readonly` (Analytics API). Note: Analytics `reports.query` docs now additionally state requests require `youtube.readonly` access — verify both scopes in the consent screen at build time.
+- **Auth (v1/PoC)**: Google OAuth 2.0 with scope `youtube.readonly` only (channels.list data). `yt-analytics.readonly` is deliberately **not** requested in v1 — Analytics is a P1 source, and requesting an unused sensitive scope enlarges the review gate (least privilege, §10).
 - **Metrics v1**: subscribers, video count, channel title/avatar via `channels.list` (1 quota unit).
 - **Quota**: Data API default 10,000 units/day **per project (all users combined)**; `channels.list` = 1 unit → ~5–9k accounts/day of headroom with a daily snapshot. Free quota extension exists via Google's quota & compliance audit — necessary path at scale.
-- **Analytics API**: separate per-query quota (cost methodology in Google's data model docs — exact default to be confirmed at build). P1 metric source (views, watch time).
+- **Analytics API (P1)**: when this lands, add scope `yt-analytics.readonly` and verify the `reports.query` scope requirement then (§15 risks 5–6). Separate per-query quota; exact default confirmed at that point.
 - **Token lifecycle**: access token ~1h, refresh token long-lived; refresh shortly before expiry; handle revocation.
 - **Review gate**: public launch requires OAuth verification (sensitive scopes): privacy policy on the same domain, domain ownership verified, branding, demo video, scope justification. Google cites ~3–5 business days; plan for longer. Until verified: test users only (user cap, tester warning screens).
 
@@ -189,7 +189,7 @@ Why snapshots are the spine: TikTok exposes no historical API at all, Meta limit
 ## 12. Non-functional requirements
 
 - Dashboard TTFB target < 300ms (DB-only render makes this easy).
-- Snapshot job: complete 1k accounts within one cron run; scale via batching, not parallelism that risks rate limits.
+- Snapshot job: the HTTP endpoint stays inside a provider's serverless time budget (~45s); the account loop runs in the scheduler, not the request handler. Scale via bounded per-run batches, not parallelism that risks rate limits. (The 1k-accounts figure is a scale ambition, not a per-request runtime target.)
 - Uptime: dashboard is resilient to full platform API outages (serves last snapshots).
 - Accessibility: WCAG AA contrast; large tap targets (mobile-first).
 - Cost envelope: infra-only running cost target (free/low tiers) while user count is small.
@@ -204,13 +204,21 @@ Why snapshots are the spine: TikTok exposes no historical API at all, Meta limit
 
 ## 14. Phasing & launch checklist
 
-**Current phase — PoC (local-first)**
-Goal: prove the spine end-to-end with the owner's own accounts at ~zero cost. No review submissions, no hosting, no public users.
+**Current phase — PoC (hosted, ~zero cost)**
+Goal: prove the spine end-to-end at ~zero cost, including one free-tier hosted environment so OAuth callbacks run against a real URL. No review submissions, no public launch.
 - [ ] Auth, DB schema, adapter interface.
-- [ ] All four adapters (YouTube, TikTok, Instagram, Facebook) in each platform's self-serve dev mode (own accounts only).
+- [ ] All four adapters (YouTube, TikTok, Instagram, Facebook) in each platform's self-serve dev mode — owner's accounts.
 - [ ] Daily snapshot run + combined-audience dashboard, served from our DB.
-- [ ] Done when: all four connect via OAuth; snapshots accumulate idempotently; dashboard renders solely from DB; gated metrics degrade gracefully; reconnect flow works.
-- Deferred until after PoC: review submissions, Business Verification + entity, hosting/deploy, privacy/terms pages, post-level metrics.
+- [ ] One free-tier hosted environment (dev credentials only, no custom domain) for OAuth callbacks + volunteer validation.
+- [ ] Volunteer validation: invited testers complete sign-in and connect ≥1 platform — qualitative feedback only.
+- [ ] Done when: all four connect via OAuth; snapshots accumulate idempotently (≥8 days of history so the 7-day delta renders); dashboard renders solely from DB; gated metrics degrade gracefully; reconnect flow works.
+- Deferred until after PoC: production hosting/cutover, the measured beta exit bar, review submissions, Business Verification + entity, privacy/terms pages, post-level metrics.
+
+**Prerequisites (PoC).** The owner and every invited tester must hold: a Google account with a YouTube channel; a TikTok account; an **Instagram professional** (business/creator) account; a **Facebook Page**. Accounts lacking these cannot validate the corresponding adapter — a setup limit, not a product bug.
+
+**Order & lead time (PoC).** dev apps/credentials → hosted environment → first adapter connects → snapshot core + a daily trigger pointed at the **hosted** DB (starts the clock) → ≥8 consecutive days of rows → volunteer validation → PoC exit. The 8-day history window is a hard calendar lead time: every day the daily trigger is not live is a day added to the end of the phase.
+
+**Boundary — PoC validation vs beta exit (do not merge the two).** PoC volunteer validation is qualitative and unmeasured: no targets, no metrics. The measured bar — ≥3 testers with ≥2 platforms connected, 7-day return rate, >99% snapshot success — belongs to the post-PoC beta phase and is tracked there.
 
 **Post-PoC — beta prep & submissions**
 - [ ] Host the app; domain; privacy policy + ToS pages.
@@ -223,7 +231,7 @@ Goal: prove the spine end-to-end with the owner's own accounts at ~zero cost. No
 
 **Public launch**
 - [ ] YouTube + TikTok public (after verification/approval); Meta flips on per review completion.
-- [ ] Success metrics: beta users with ≥2 platforms connected; 7-day return rate; snapshot success rate >99%.
+- [ ] Launch bar (distinct from the beta exit bar in the post-PoC checklist): define before launch — e.g. a user count and a 30-day retention figure — rather than restating the beta numbers.
 
 ## 15. Risks & open questions
 
@@ -233,12 +241,12 @@ Goal: prove the spine end-to-end with the owner's own accounts at ~zero cost. No
 | 2 | Google verification turnaround | Risk | Stated ~3–5 business days; budget more; rejection = iterate on demo/privacy artifacts. |
 | 3 | TikTok scope approval outcome | Risk | Weakest data of the four even if approved; communicate limits in UI honestly. |
 | 4 | YT project-wide 10k quota shared by all users | Scaling risk | Fine to ~thousands of accounts; free extension via compliance audit. |
-| 5 | YouTube Analytics API exact default quota | Verify at build | Query-cost based; check Cloud Console quotas page. |
-| 6 | Whether `reports.query` also requires `youtube.readonly` | Verify at build | Docs note it; confirm in consent screen + API calls. |
+| 5 | YouTube Analytics API exact default quota | P1 | Analytics is a P1 source and `yt-analytics.readonly` is not requested in v1. Verify the quota when the P1 metric lands. |
+| 6 | Whether `reports.query` also requires `youtube.readonly` | P1 | Verify alongside the P1 Analytics work, in the consent screen + live calls. |
 | 7 | IG `followers_count` profile field availability under 100 followers | Verify in sandbox | Distinguished from the gated daily insights metric. |
 | 8 | Monetization | Accepted | Free for now, revisit post-PoC (owner-confirmed). |
 | 9 | Product name / domain | Deferred | 10 candidates suggested (Sumly, Crowdcount, Plainstats, Snapcount, Allcount, Reachly, Statbird, Oneboard, Statboard, Fanmeter); availability/trademark unchecked. Needed before public-launch artifacts. |
-| 10 | Hosting | Post-PoC | PoC runs locally. Decide managed platform (cron + free tiers) vs own VPS before beta. |
+| 10 | Hosting | Partly resolved | PoC runs on one free-tier hosted environment (Vercel Hobby + Supabase free, dev credentials, no custom domain) so OAuth callbacks run against a real URL. Prod cutover decision (managed platform vs own VPS) still open before beta. |
 
 ## Appendix A — Verified facts (with sources)
 
@@ -268,7 +276,7 @@ All checked 2026-09-12 against primary docs:
 | Monetization | Free for now, revisit post-PoC | Owner decision; vendor path ruled out earlier |
 | Naming | Deferred; 10 candidates | Domain/trademark checks pending; doesn't block PoC |
 | Business entity | Register later | Meta stays flag-gated until then |
-| Stack | Next.js + Supabase free tier + Vitest, local-first | Owner-approved; zero-cost PoC |
+| Stack | Next.js + Supabase free tier + Vitest, one hosted free-tier PoC env | Owner-approved; zero-cost PoC with dev credentials and no custom domain |
 | Meta strategy | Two separate apps; ship behind flag | Login types mutually exclusive; no entity yet |
 | Launch order | YouTube + TikTok public first | Only platforms whose gates are openable without an entity |
 
@@ -282,3 +290,5 @@ All checked 2026-09-12 against primary docs:
 | 0.2.0 | 2026-09-12 | budigital | Corrected target-user framing: beginner-friendly is a design quality, not a user segment. Removed beginner scoping from §1, §2, §3; revised §8 rationale, §12 accessibility note, Appendix B rationale. |
 | 0.3.0 | 2026-09-12 | budigital | Current phase reframed as local-first PoC (all four adapters, own accounts, no review submissions). Phasing reordered: PoC → beta/submissions → P1 + Meta → public launch. Risks 1/9/10 re-typed. |
 | 1.0.0 | 2026-09-12 | budigital | Approved baseline. Owner confirmed: free for now; entity later; stack; two Meta apps; metrics = audience + growth only. Name/domain deferred (10 candidates, unchecked). |
+| 1.1.0 | 2026-09-15 | budigital | PoC amended: one free-tier hosted environment (dev credentials, no custom domain) and invited-tester validation added to §14; explicit PoC-vs-beta-exit boundary; §15 risk 10 re-typed. |
+| 1.2.0 | 2026-09-15 | budigital | Consultant review applied: PoC prerequisites + order/lead-time notes (§14); delta requires 8 days of history (§4); FR-6 rewritten; `yt-analytics.readonly` deferred to P1 (§9.1, §15 risks 5–6); snapshot runtime ceiling (§12); launch bar separated from the beta bar (§14); Appendix B stack row re-typed. |

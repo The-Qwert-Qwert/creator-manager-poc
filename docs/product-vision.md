@@ -1,11 +1,11 @@
 # Product Vision: Centralized Creator Analytics
 
-- **Version**: 0.1.0
+- **Version**: 0.3.0
 - **Status**: Draft — for owner review
-- **Date**: 2026-09-14
+- **Date**: 2026-09-14 (amended 2026-09-15)
 - **Owner**: budigital
 - **Stable filename**: `docs/product-vision.md` (version lives here, not in filename)
-- **Pins**: FSD v1.0.0 at `docs/plans/2026-09-12-creator-analytics-fsd.md`
+- **Pins**: FSD v1.1.0 at `docs/plans/2026-09-12-creator-analytics-fsd.md`
 
 ---
 
@@ -19,11 +19,11 @@ Beginner-friendly is a design quality (readable on day one), not an audience lim
 
 ## 2. Where we are now — Phase 1 PoC
 
-Single creator, own accounts, local-first. Proves the spine end-to-end.
+Single creator, own accounts, one free-tier hosted environment. Proves the spine end-to-end.
 
-- Scope: FSD v1.0.0 §2 + §14. Auth, 4 adapters in dev mode, daily snapshots, DB-only dashboard.
+- Scope: FSD v1.1.0 §2 + §14. Auth, 4 adapters in dev mode, daily snapshots, DB-only dashboard, one zero-cost hosted env for OAuth + volunteer validation.
 - User: beginner / small creator juggling 2–4 platforms.
-- Win condition: first real users connect ≥1 platform, return after 7 days, say "the number feels right".
+- Win condition (PoC, unmeasured): invited testers sign in, connect ≥1 platform, and say "the number feels right". The 7-day return rate is a measured **beta** metric (FSD §14), not a PoC gate.
 - Explicitly NOT building: team seats, multi-creator views, exports, rate cards, campaigns, scheduling, mobile native.
 
 PoC is frozen. Vision changes do not expand PoC scope.
@@ -82,4 +82,6 @@ Full BRD deferred until Phase 2 discovery.
 
 | Version | Date | Author | Change |
 |---------|------|--------|--------|
-| 0.1.0 | 2026-09-14 | budigital + mentor | Initial vision draft. Locks PoC scope, parks agency/pro features as Phase 2/3, records interview evidence. |
+| 0.1.0 | 2026-09-14 | budigital | Initial vision draft. Locks PoC scope, parks agency/pro features as Phase 2/3, records interview evidence. |
+| 0.2.0 | 2026-09-15 | budigital | PoC now includes one free-tier hosted environment and invited-tester validation (aligns with FSD 1.1.0); pin bumped. |
+| 0.3.0 | 2026-09-15 | budigital | Win condition restated as PoC-qualitative; the 7-day return rate is explicitly a beta metric (FSD §14). Pin bumped to FSD v1.2.0. |
