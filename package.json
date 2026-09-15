@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Centralized creator analytics dashboard (YouTube, TikTok, Instagram, Facebook) — PoC.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_ENV=development next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

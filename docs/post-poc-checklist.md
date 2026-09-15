@@ -1,11 +1,11 @@
 # Post-PoC Readiness Checklist
 
-- **Version**: 0.1.0
+- **Version**: 0.3.0
 - **Status**: Draft — for owner review
-- **Date**: 2026-09-14
+- **Date**: 2026-09-14 (amended 2026-09-15)
 - **Owner**: budigital
 - **Stable filename**: `docs/post-poc-checklist.md` (version lives here, not in filename)
-- **Pins**: FSD v1.0.0, Product Vision v0.1.0
+- **Pins**: FSD v1.2.0, Product Vision v0.3.0
 - **Rule**: Do not start until PoC §14 done (4 connects work, snapshots idempotent, dashboard DB-only, reconnect banner works).
 
 ---
@@ -24,6 +24,10 @@
 | Backups | Supabase auto + weekly `pg_dump` local | $0 | Covers token table loss |
 
 Do NOT buy: VPS, KMS (env key enough for beta), Phyllo-class vendor (~$199+/mo floor, already rejected), S3/CDN, native mobile.
+
+**Already in use by the PoC (FSD §14):** Vercel Hobby + Supabase free host the PoC environment with **dev** credentials and no custom domain. The §4 cutover is a separate production environment — do not reuse the PoC Vercel project or Supabase project for it.
+
+**Snapshot execution (decided):** the account loop runs inside the scheduler job; `/api/cron/snapshot` is a thin trigger that stays inside the serverless time budget. Vercel Hobby is licensed for **non-commercial** use — re-plan hosting before any monetization. GitHub scheduled workflows can be delayed and are auto-disabled after ~60 days of repo inactivity, so keep the workflow alive and alert if no snapshot row lands by 06:00 UTC.
 
 ## 2. Compliance pages (must exist before any submission)
 
@@ -54,10 +58,12 @@ No pages = auto-reject by Google + Meta.
 
 ## 5. Beta exit bar
 
+Starts after the PoC gate (FSD §14) and the **YouTube + TikTok** submissions in §3. Meta App Review / Business Verification is **not** a beta-entry dependency — Meta stays flag-gated (FSD §14). This bar is **measured on production** — it is not the PoC volunteer validation, which is qualitative, unmeasured, and runs on platform test users (FSD §14 boundary note).
+
 - [ ] ≥3 testers with ≥2 platforms connected
-- [ ] 7-day return rate tracked
+- [ ] 7-day return rate ≥ X% — owner sets X before beta starts
 - [ ] Snapshot success rate >99%
-- [ ] "Number feels right" feedback collected
+- [ ] "Number feels right" feedback collected (qualitative, not a metric)
 
 ## 6. Total to be ready
 
@@ -67,4 +73,6 @@ $0 + ~150k IDR/yr domain. Entity/PT deferred until Meta public launch needs it.
 
 | Version | Date | Author | Change |
 |---------|------|--------|--------|
-| 0.1.0 | 2026-09-14 | budigital + mentor | Initial post-PoC stack + submission order. Pinned to FSD v1.0.0. |
+| 0.1.0 | 2026-09-14 | budigital | Initial post-PoC stack + submission order. Pinned to FSD v1.0.0. |
+| 0.2.0 | 2026-09-15 | budigital | Beta exit bar marked production-measured and distinct from PoC volunteer validation; stack note that the PoC env already runs on the free tier. Pinned to FSD v1.1.0. |
+| 0.3.0 | 2026-09-15 | budigital | Beta entry no longer waits on the Meta review; return-rate threshold left for the owner to set; snapshot execution model, Vercel non-commercial licence and scheduler-reliability notes added. Pinned to FSD v1.2.0. |
