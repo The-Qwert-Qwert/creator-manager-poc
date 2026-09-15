@@ -44,34 +44,12 @@ genuinely depends on the other branch landing first.
 
 ## Pull requests
 
-Open a PR from the task branch into `poc-mvp-phase-1`, and reference the work
-item in the PR title:
+Open a PR from the task branch into `poc-mvp-phase-1`, with the work item id
+in the title:
 
 ```
 [CREAT-8] Add adapter types and registry
 ```
-
-- `[CREAT-8]` — with brackets: links the work item **and** drives automatic
-  state updates (requires PR state mapping to be configured in Plane).
-- `CREAT-8` — without brackets: links only, no state automation.
-
-The documented trigger for linking is the **pull request title or
-description**, not the branch name. Keep the id in the branch name anyway for
-local traceability.
-
-## Linking to Plane
-
-The GitHub integration in Plane syncs PRs and work item state. Before it can
-work:
-
-- Workspace role must be Admin or Owner.
-- Plane → Settings → Integrations → GitHub → connect the account that owns the
-  repository.
-- Configure PR state mapping per project, or PRs will link but not move states.
-
-Issue syncing (GitHub issues ↔ Plane work items) is separate from PR linking
-and needs the `plane` label on the GitHub issue and the `github` label on the
-Plane work item.
 
 ## Before committing
 
