@@ -276,7 +276,7 @@ All checked 2026-09-12 against primary docs:
 | Monetization | Free for now, revisit post-PoC | Owner decision; vendor path ruled out earlier |
 | Naming | Deferred; 10 candidates | Domain/trademark checks pending; doesn't block PoC |
 | Business entity | Register later | Meta stays flag-gated until then |
-| Stack | Next.js + Supabase free tier + Vitest, local-first | Owner-approved; zero-cost PoC |
+| Stack | Next.js + Supabase free tier + Vitest, one hosted free-tier PoC env | Owner-approved; zero-cost PoC with dev credentials and no custom domain |
 | Meta strategy | Two separate apps; ship behind flag | Login types mutually exclusive; no entity yet |
 | Launch order | YouTube + TikTok public first | Only platforms whose gates are openable without an entity |
 
@@ -291,4 +291,4 @@ All checked 2026-09-12 against primary docs:
 | 0.3.0 | 2026-09-12 | budigital | Current phase reframed as local-first PoC (all four adapters, own accounts, no review submissions). Phasing reordered: PoC → beta/submissions → P1 + Meta → public launch. Risks 1/9/10 re-typed. |
 | 1.0.0 | 2026-09-12 | budigital | Approved baseline. Owner confirmed: free for now; entity later; stack; two Meta apps; metrics = audience + growth only. Name/domain deferred (10 candidates, unchecked). |
 | 1.1.0 | 2026-09-15 | budigital | PoC amended: one free-tier hosted environment (dev credentials, no custom domain) and invited-tester validation added to §14; explicit PoC-vs-beta-exit boundary; §15 risk 10 re-typed. |
-| 1.2.0 | 2026-09-15 | budigital | Consultant review applied: PoC prerequisites + order/lead-time notes (§14); delta requires 8 days of history (§4); FR-6 rewritten; `yt-analytics.readonly` deferred to P1 (§9.1, §15 risks 5–6); snapshot runtime ceiling (§12); launch bar separated from the beta bar (§14). |
+| 1.2.0 | 2026-09-15 | budigital | Consultant review applied: PoC prerequisites + order/lead-time notes (§14); delta requires 8 days of history (§4); FR-6 rewritten; `yt-analytics.readonly` deferred to P1 (§9.1, §15 risks 5–6); snapshot runtime ceiling (§12); launch bar separated from the beta bar (§14); Appendix B stack row re-typed. |
