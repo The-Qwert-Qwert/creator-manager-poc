@@ -1,4 +1,9 @@
-export const PLATFORMS = ["youtube", "tiktok", "instagram", "facebook"] as const;
+export const PLATFORMS = [
+  "youtube",
+  "tiktok",
+  "instagram",
+  "facebook",
+] as const;
 
 export type Platform = (typeof PLATFORMS)[number];
 
@@ -36,4 +41,23 @@ export interface PlatformAdapter {
   exchangeCode(code: string): Promise<ExchangeResult>;
   refresh(tokens: TokenSet): Promise<TokenSet>;
   fetchProfile(account: ConnectedAccount): Promise<ProfileSnapshot>;
+}
+
+export type AdapterErrorCode =
+  | "REVOKED" // Token revoked or refresh token dead -> transition account to needs_reconnect
+  | "UNAUTHORIZED" // Access token expired -> trigger adapter.refresh() and retry once
+  | "RATE_LIMITED" // 429 or quota exceeded -> halt batch, prevent retry storms
+  | "NOT_FOUND" // Account has no channel/page -> display user-facing domain notice
+  | "UPSTREAM_ERROR"; // 5xx or unparseable response -> skip, retry on next cron cycle
+
+export class AdapterError extends Error {
+  constructor(
+    public readonly platform: Platform,
+    public readonly code: AdapterErrorCode,
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(`[${platform.toUpperCase()}][${code}] ${message}`);
+    this.name = "AdapterError";
+  }
 }

@@ -70,4 +70,42 @@ describe("config", () => {
       );
     });
   });
+
+  describe("google", () => {
+    it("returns clientId, clientSecret, and redirectUri when set", () => {
+      vi.stubEnv("GOOGLE_CLIENT_ID", "google-client-id");
+      vi.stubEnv("GOOGLE_CLIENT_SECRET", "google-client-secret");
+      vi.stubEnv(
+        "GOOGLE_REDIRECT_URI",
+        "https://app.example.com/api/auth/youtube/callback"
+      );
+
+      expect(config.google.clientId).toBe("google-client-id");
+      expect(config.google.clientSecret).toBe("google-client-secret");
+      expect(config.google.redirectUri).toBe(
+        "https://app.example.com/api/auth/youtube/callback"
+      );
+    });
+
+    it("throws when GOOGLE_CLIENT_ID is missing", () => {
+      vi.stubEnv("GOOGLE_CLIENT_ID", "");
+      expect(() => config.google.clientId).toThrow(
+        "GOOGLE_CLIENT_ID is not set"
+      );
+    });
+
+    it("throws when GOOGLE_CLIENT_SECRET is missing", () => {
+      vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+      expect(() => config.google.clientSecret).toThrow(
+        "GOOGLE_CLIENT_SECRET is not set"
+      );
+    });
+
+    it("throws when GOOGLE_REDIRECT_URI is missing", () => {
+      vi.stubEnv("GOOGLE_REDIRECT_URI", "");
+      expect(() => config.google.redirectUri).toThrow(
+        "GOOGLE_REDIRECT_URI is not set"
+      );
+    });
+  });
 });

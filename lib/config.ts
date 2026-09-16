@@ -32,4 +32,16 @@ export const config = {
       return requireEnv("SUPABASE_SECRET_KEY");
     },
   },
+
+  google: {
+    get clientId(): string {
+      return requireEnv("GOOGLE_CLIENT_ID");
+    },
+    get clientSecret(): string {
+      return requireEnv("GOOGLE_CLIENT_SECRET");
+    },
+    get redirectUri(): string {
+      return requireEnv("GOOGLE_REDIRECT_URI");
+    },
+  },
 } as const;
