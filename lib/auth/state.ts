@@ -1,27 +1,19 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { PLATFORMS, type Platform } from "@/lib/adapters/types";
+import { config } from "@/lib/config";
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-function getSecret(secret?: string): string {
-  const resolved = secret ?? process.env.APP_SECRET;
-  if (!resolved) {
-    throw new Error("APP_SECRET is not set");
-  }
-  return resolved;
-}
-
-export function generateState(platform: Platform, secret?: string): string {
-  const resolvedSecret = getSecret(secret);
+export function generateState(platform: Platform, secret = config.appSecret): string {
   const nonce = randomBytes(16).toString("hex");
   const timestamp = Date.now();
   const payload = Buffer.from(`${platform}:${nonce}:${timestamp}`, "utf8").toString("base64url");
-  const hmac = createHmac("sha256", resolvedSecret).update(payload).digest("hex");
+  const hmac = createHmac("sha256", secret).update(payload).digest("hex");
 
   return `${payload}.${hmac}`;
 }
 
-export function verifyState(state: string, secret?: string): { platform: Platform } {
+export function verifyState(state: string, secret = config.appSecret): { platform: Platform } {
   if (!state || typeof state !== "string") {
     throw new Error("state: missing or malformed");
   }
@@ -32,8 +24,7 @@ export function verifyState(state: string, secret?: string): { platform: Platfor
   }
 
   const [payload, hmac] = parts;
-  const resolvedSecret = getSecret(secret);
-  const expectedHmac = createHmac("sha256", resolvedSecret).update(payload).digest("hex");
+  const expectedHmac = createHmac("sha256", secret).update(payload).digest("hex");
 
   const hmacBuffer = Buffer.from(hmac, "utf8");
   const expectedBuffer = Buffer.from(expectedHmac, "utf8");
