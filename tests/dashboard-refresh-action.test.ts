@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   account: null as Record<string, unknown> | null,
   accountFilters: [] as [string, string][],
   accountUpdates: [] as Record<string, unknown>[],
+  claimRows: [{ id: "acct-1" }] as Record<string, unknown>[],
   snapshotUpserts: [] as Record<string, unknown>[],
   fetchProfileCalls: 0,
   fetchProfile: async (): Promise<unknown> => ({
@@ -68,7 +69,14 @@ vi.mock("@/lib/auth/session", () => ({
             },
             update: (payload: Record<string, unknown>) => {
               state.accountUpdates.push(payload);
-              return { eq: async () => ({ error: null }) };
+              const builder = {
+                eq: () => builder,
+                or: () => builder,
+                select: async () => ({ data: state.claimRows, error: null }),
+                then: (resolve: (value: { error: null }) => unknown) =>
+                  resolve({ error: null }),
+              };
+              return builder;
             },
           };
         }
@@ -127,6 +135,7 @@ describe("refreshAccount", () => {
     state.account = storedAccount();
     state.accountFilters = [];
     state.accountUpdates = [];
+    state.claimRows = [{ id: ACCOUNT_ID }];
     state.snapshotUpserts = [];
     state.fetchProfileCalls = 0;
     state.fetchProfile = async () => ({
@@ -217,5 +226,21 @@ describe("refreshAccount", () => {
   it("rejects a submission with no account id", async () => {
     await expect(submit(null)).resolves.toBe("/dashboard?refresh=failed");
     expect(state.fetchProfileCalls).toBe(0);
+  });
+
+  it("refuses the refresh when another request already claimed the slot", async () => {
+    state.claimRows = [];
+
+    await expect(submit()).resolves.toBe("/dashboard?refresh=cooldown&platform=tiktok");
+    expect(state.fetchProfileCalls).toBe(0);
+  });
+
+  it("does not call an expired access token a dead connection", async () => {
+    state.fetchProfile = async () => {
+      throw new AdapterError("tiktok", "UNAUTHORIZED", "token expired");
+    };
+
+    await expect(submit()).resolves.toBe("/dashboard?refresh=failed&platform=tiktok");
+    expect(state.accountUpdates).not.toContainEqual({ status: "needs_reconnect" });
   });
 });

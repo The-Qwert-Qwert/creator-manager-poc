@@ -2,6 +2,9 @@ import { PLATFORMS, type AccountStatus, type Platform } from "@/lib/adapters/typ
 
 export const DELTA_WINDOW_DAYS = 7;
 export const SPARKLINE_POINTS = 30;
+// Enough history for the sparkline plus slack for the 7-day delta, so the newest
+// snapshot is always present even if it is older than the sparkline window.
+export const SNAPSHOT_FETCH_LIMIT = SPARKLINE_POINTS + 30;
 
 export const COMBINED_AUDIENCE_LABEL = "Total audience across platforms";
 export const COMBINED_AUDIENCE_NOTE =
@@ -38,7 +41,7 @@ export function gatedMetricsNotice(
     return null;
   }
 
-  return `${gate.hidden} stay hidden until you have ${GATED_METRICS_THRESHOLD} ${gate.thresholdUnit} — showing your audience count only.`;
+  return `${gate.hidden} aren't collected yet (and are hidden below ${GATED_METRICS_THRESHOLD} ${gate.thresholdUnit}) — showing your audience count only.`;
 }
 
 export type Delta =

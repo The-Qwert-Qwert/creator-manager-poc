@@ -27,7 +27,9 @@ Copy `.env.example` to `.env.local` and fill in values as adapters are built.
 ```
 app/            App Router pages, layouts, auth callback + sign-in routes
 lib/            token-crypto, adapter types + registry, dashboard metrics, Supabase clients
-tests/          Vitest specs — token-crypto, adapter-registry, dashboard-metrics
+tests/          Vitest specs — token-crypto, adapter-registry, platform adapters
+                (YouTube/TikTok/Instagram/Facebook), auth session + state, config,
+                connect flow, dashboard metrics, dashboard refresh action, manual-refresh
 supabase/       SQL migrations (init + RLS)
 docs/plans/     FSD — source of truth for scope and behavior
 docs/           Product vision, Post-PoC readiness checklist

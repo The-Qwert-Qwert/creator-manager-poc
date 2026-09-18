@@ -6,11 +6,11 @@ import { redirect } from "next/navigation";
 import { getAdapter, registerDefaultAdapters } from "@/lib/adapters/registry";
 import { AdapterError, type AdapterErrorCode, type Platform } from "@/lib/adapters/types";
 import { requireUser } from "@/lib/auth/session";
-import { cooldownRemainingMs } from "@/lib/dashboard/manual-refresh";
+import { cooldownRemainingMs, MANUAL_REFRESH_COOLDOWN_MS } from "@/lib/dashboard/manual-refresh";
 import { decryptToken } from "@/lib/token-crypto";
 
 const REFRESHABLE_COLUMNS =
-  "id, platform, external_id, handle, access_token_enc, last_manual_refresh_at";
+  "id, platform, external_id, access_token_enc, last_manual_refresh_at";
 
 function decodeBytea(value: string): Buffer {
   return Buffer.from(value.startsWith("\\x") ? value.slice(2) : value, "hex");
@@ -23,7 +23,6 @@ function dashboardPath(params: Record<string, string>): string {
 function failureParam(code: AdapterErrorCode | undefined): string {
   switch (code) {
     case "REVOKED":
-    case "UNAUTHORIZED":
       return "expired";
     case "RATE_LIMITED":
       return "rate_limited";
@@ -64,12 +63,21 @@ export async function refreshAccount(formData: FormData): Promise<void> {
   }
 
   // Claim the cooldown slot before calling the platform, so a failing account
-  // cannot be clicked into a retry storm (FSD §10 rate-limit hygiene).
+  // cannot be clicked into a retry storm (FSD §10 rate-limit hygiene). The
+  // update is conditional, so two concurrent submits cannot both win the slot.
   const attemptedAt = new Date().toISOString();
-  await supabase
+  const claimCutoff = new Date(Date.now() - MANUAL_REFRESH_COOLDOWN_MS).toISOString();
+  const { data: claimed } = await supabase
     .from("connected_accounts")
     .update({ last_manual_refresh_at: attemptedAt })
-    .eq("id", account.id);
+    .eq("id", account.id)
+    .eq("user_id", user.id)
+    .or(`last_manual_refresh_at.is.null,last_manual_refresh_at.lt.${claimCutoff}`)
+    .select("id");
+
+  if (!claimed || claimed.length === 0) {
+    redirect(dashboardPath({ refresh: "cooldown", platform: account.platform }));
+  }
 
   registerDefaultAdapters();
   const adapter = getAdapter(account.platform as Platform);
@@ -104,8 +112,9 @@ export async function refreshAccount(formData: FormData): Promise<void> {
   } catch (error) {
     const code = error instanceof AdapterError ? error.code : undefined;
 
-    // FR-5: stop retrying a dead token until the user reconnects.
-    if (code === "REVOKED" || code === "UNAUTHORIZED") {
+    // FR-5: a revoked token is a dead connection. An expired access token is a
+    // refresh concern (CREAT-32), not a dead connection — do not claim one.
+    if (code === "REVOKED") {
       await supabase
         .from("connected_accounts")
         .update({ status: "needs_reconnect" })

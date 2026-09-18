@@ -10,14 +10,15 @@ import { config } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
 import {
   DELTA_NOTES,
+  DELTA_PLACEHOLDER,
   DELTA_WINDOW_DAYS,
+  SNAPSHOT_FETCH_LIMIT,
+  SPARKLINE_POINTS,
   buildDashboardMetrics,
   type Delta,
-  type SnapshotPoint,
 } from "@/lib/dashboard/metrics";
 import { cooldownLabel, cooldownRemainingMs } from "@/lib/dashboard/manual-refresh";
 
-const SPARKLINE_WINDOW_DAYS = 30;
 const MS_PER_DAY = 86_400_000;
 
 interface DashboardPageProps {
@@ -90,7 +91,7 @@ function DeltaSummary({ delta }: { delta: Delta }) {
   if (!delta.available) {
     return (
       <p style={styles.deltaMuted}>
-        <span aria-hidden="true">—</span> {DELTA_NOTES[delta.reason]}
+        <span aria-hidden="true">{DELTA_PLACEHOLDER}</span> {DELTA_NOTES[delta.reason]}
       </p>
     );
   }
@@ -108,14 +109,14 @@ function DeltaSummary({ delta }: { delta: Delta }) {
               ? "var(--danger)"
               : "var(--muted)",
       }}
-      aria-label={`${direction} ${Math.abs(delta.value).toLocaleString()} versus ${DELTA_WINDOW_DAYS} days ago`}
     >
       <span aria-hidden="true">
         {delta.value > 0 ? "▲ " : delta.value < 0 ? "▼ " : ""}
         {delta.value > 0 ? "+" : delta.value < 0 ? "−" : ""}
         {Math.abs(delta.value).toLocaleString()}
       </span>
-      <span style={styles.deltaCaption}> vs {DELTA_WINDOW_DAYS} days ago</span>
+      <span style={styles.deltaCaption} aria-hidden="true"> vs {DELTA_WINDOW_DAYS} days ago</span>
+      <span style={styles.srOnly}>{`${direction} ${Math.abs(delta.value).toLocaleString()} versus ${DELTA_WINDOW_DAYS} days ago`}</span>
     </p>
   );
 }
@@ -152,13 +153,17 @@ export default async function DashboardPage(props: DashboardPageProps) {
   const refreshError = readParam("refresh");
 
   // FR-4: the dashboard reads our DB only. No platform API is called on render.
+  // One embedded query: each account with its newest snapshots, so an account
+  // whose newest snapshot is older than the sparkline window still shows a value.
   const { data: rawAccounts } = await supabase
     .from("connected_accounts")
     .select(
-      "id, platform, handle, avatar_url, status, last_manual_refresh_at",
+      "id, platform, handle, status, last_manual_refresh_at, metric_snapshots(audience_count, captured_on)",
     )
     .eq("user_id", user.id)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .order("captured_on", { referencedTable: "metric_snapshots", ascending: false })
+    .limit(SNAPSHOT_FETCH_LIMIT, { referencedTable: "metric_snapshots" });
 
   // Flag-gated until Meta approval (CREAT-23)
   const accounts = (rawAccounts ?? []).filter((account) => {
@@ -181,41 +186,19 @@ export default async function DashboardPage(props: DashboardPageProps) {
     return true;
   });
 
-  // One bounded read for the window the page actually shows
-  const snapshotsByAccount = new Map<string, SnapshotPoint[]>();
-  const accountIds = accounts.map((account) => account.id);
   const now = new Date();
-
-  if (accountIds.length > 0) {
-    const since = new Date(now.getTime() - (SPARKLINE_WINDOW_DAYS - 1) * MS_PER_DAY)
-      .toISOString()
-      .slice(0, 10);
-
-    const { data: snapshots } = await supabase
-      .from("metric_snapshots")
-      .select("connected_account_id, audience_count, captured_on")
-      .in("connected_account_id", accountIds)
-      .gte("captured_on", since)
-      .order("captured_on", { ascending: true });
-
-    for (const snapshot of snapshots ?? []) {
-      const points = snapshotsByAccount.get(snapshot.connected_account_id) ?? [];
-      points.push({
-        capturedOn: snapshot.captured_on,
-        audienceCount: snapshot.audience_count,
-      });
-      snapshotsByAccount.set(snapshot.connected_account_id, points);
-    }
-  }
 
   const metrics = buildDashboardMetrics(
     accounts.map((account) => ({
       id: account.id,
       platform: account.platform as Platform,
       handle: account.handle,
-      avatarUrl: account.avatar_url,
+      avatarUrl: null,
       status: account.status as AccountStatus,
-      snapshots: snapshotsByAccount.get(account.id) ?? [],
+      snapshots: (account.metric_snapshots ?? []).map((snapshot) => ({
+        capturedOn: snapshot.captured_on,
+        audienceCount: snapshot.audience_count,
+      })),
     })),
   );
 
@@ -329,7 +312,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
             {metrics.combinedAudienceLabel}
           </h2>
           <p style={styles.summaryValue}>
-            {hasAnyAudience ? metrics.combinedAudience.toLocaleString() : "—"}
+            {hasAnyAudience ? metrics.combinedAudience.toLocaleString() : DELTA_PLACEHOLDER}
           </p>
           <DeltaSummary delta={metrics.delta} />
           <p style={styles.summaryNote}>{metrics.combinedAudienceNote}</p>
@@ -403,7 +386,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
                     <div style={styles.metricBlock}>
                       <p style={styles.metricValue}>
-                        {row.audienceCount === null ? "—" : row.audienceCount.toLocaleString()}
+                        {row.audienceCount === null ? DELTA_PLACEHOLDER : row.audienceCount.toLocaleString()}
                       </p>
                       <p style={styles.metricLabel}>{meta.audienceLabel}</p>
                       <DeltaSummary delta={row.delta} />
@@ -411,15 +394,19 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
                     <div style={styles.trendBlock}>
                       <Sparkline points={row.sparkline} platformLabel={meta.name} />
-                      <p style={styles.trendCaption}>Last {SPARKLINE_WINDOW_DAYS} days</p>
+                      <p style={styles.trendCaption}>Last {SPARKLINE_POINTS} days</p>
                     </div>
 
                     <div style={styles.metaBlock}>
                       <StatusChip status={row.status} />
                       <p style={styles.lastUpdated}>
-                        <time dateTime={row.lastUpdated ?? undefined}>
-                          {formatUpdated(row.lastUpdated, now)}
-                        </time>
+                        {row.lastUpdated ? (
+                          <time dateTime={row.lastUpdated}>
+                            {formatUpdated(row.lastUpdated, now)}
+                          </time>
+                        ) : (
+                          formatUpdated(row.lastUpdated, now)
+                        )}
                       </p>
                       {row.gatedNotice && <p style={styles.gatedNotice}>{row.gatedNotice}</p>}
 
@@ -429,7 +416,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
                           type="submit"
                           disabled={remaining > 0}
                           style={remaining > 0 ? styles.buttonDisabled : styles.buttonSecondary}
-                          aria-label={`Refresh ${meta.name} account now`}
+                          aria-label={remaining > 0 ? cooldownLabel(remaining) : `Refresh ${meta.name} account now`}
                         >
                           {remaining > 0 ? cooldownLabel(remaining) : "Refresh now"}
                         </button>
@@ -634,6 +621,17 @@ const styles = {
     fontWeight: 400,
     color: "var(--muted)",
   },
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    border: 0,
+  },
   accountList: {
     listStyle: "none",
     margin: "0.85rem 0 0",
@@ -760,7 +758,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     padding: "0.55rem 0.9rem",
-    backgroundColor: "var(--primary)",
+    backgroundColor: "var(--primary-fill)",
     color: "#ffffff",
     textDecoration: "none",
     border: "none",
@@ -848,7 +846,7 @@ const styles = {
     justifyContent: "center",
     minHeight: 44,
     padding: "0.55rem 0.75rem",
-    backgroundColor: "var(--primary)",
+    backgroundColor: "var(--primary-fill)",
     color: "#ffffff",
     textDecoration: "none",
     borderRadius: 8,

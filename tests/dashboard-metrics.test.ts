@@ -275,10 +275,10 @@ describe("buildDashboardMetrics", () => {
     ]);
 
     expect(metrics.rows[0]?.gatedNotice).toBe(
-      `Reach and impressions stay hidden until you have ${GATED_METRICS_THRESHOLD} followers — showing your audience count only.`,
+      `Reach and impressions aren't collected yet (and are hidden below ${GATED_METRICS_THRESHOLD} followers) — showing your audience count only.`,
     );
     expect(metrics.rows[1]?.gatedNotice).toBe(
-      `Page insights stay hidden until you have ${GATED_METRICS_THRESHOLD} Page likes — showing your audience count only.`,
+      `Page insights aren't collected yet (and are hidden below ${GATED_METRICS_THRESHOLD} Page likes) — showing your audience count only.`,
     );
     expect(metrics.rows[0]?.audienceCount).toBe(GATED_METRICS_THRESHOLD - 1);
   });
