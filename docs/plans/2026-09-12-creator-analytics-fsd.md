@@ -1,7 +1,7 @@
 # FSD: Centralized Creator Analytics
 
-- **Version**: 1.2.0
-- **Status**: Approved — baseline (amended 2026-09-15)
+- **Version**: 1.3.0
+- **Status**: Approved — baseline (amended 2026-09-18)
 - **Current phase**: PoC (hosted, ~zero cost) — all four adapters, dev-mode apps, owner accounts (see §14)
 - **Date**: 2026-09-12
 - **Owner**: budigital
@@ -292,3 +292,4 @@ All checked 2026-09-12 against primary docs:
 | 1.0.0 | 2026-09-12 | budigital | Approved baseline. Owner confirmed: free for now; entity later; stack; two Meta apps; metrics = audience + growth only. Name/domain deferred (10 candidates, unchecked). |
 | 1.1.0 | 2026-09-15 | budigital | PoC amended: one free-tier hosted environment (dev credentials, no custom domain) and invited-tester validation added to §14; explicit PoC-vs-beta-exit boundary; §15 risk 10 re-typed. |
 | 1.2.0 | 2026-09-15 | budigital | Consultant review applied: PoC prerequisites + order/lead-time notes (§14); delta requires 8 days of history (§4); FR-6 rewritten; `yt-analytics.readonly` deferred to P1 (§9.1, §15 risks 5–6); snapshot runtime ceiling (§12); launch bar separated from the beta bar (§14); Appendix B stack row re-typed. |
+| 1.3.0 | 2026-09-18 | budigital | FR-1 acceptance clarified: a protected route sends the user to sign-in and returns them to the requested path afterwards; post-auth destinations are same-origin relative paths only; a signed-in user opening the sign-in page lands back on the dashboard. |
