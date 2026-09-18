@@ -252,5 +252,33 @@ describe("config", () => {
       );
     });
   });
+
+  describe("features", () => {
+    describe("enableMeta", () => {
+      it("returns true when ENABLE_META is true", () => {
+        vi.stubEnv("ENABLE_META", "true");
+        expect(config.features.enableMeta).toBe(true);
+      });
+
+      it("returns false when ENABLE_META is false", () => {
+        vi.stubEnv("ENABLE_META", "false");
+        expect(config.features.enableMeta).toBe(false);
+      });
+
+      it("defaults to true in development mode when ENABLE_META is unset", () => {
+        vi.stubEnv("ENABLE_META", "");
+        delete process.env.ENABLE_META;
+        vi.stubEnv("NODE_ENV", "development");
+        expect(config.features.enableMeta).toBe(true);
+      });
+
+      it("defaults to false in production mode when ENABLE_META is unset", () => {
+        vi.stubEnv("ENABLE_META", "");
+        delete process.env.ENABLE_META;
+        vi.stubEnv("NODE_ENV", "production");
+        expect(config.features.enableMeta).toBe(false);
+      });
+    });
+  });
 });
 

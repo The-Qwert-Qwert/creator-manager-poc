@@ -23,10 +23,18 @@ export const config = {
 
   supabase: {
     get url(): string {
-      return requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+      const val = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (!val) {
+        throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
+      }
+      return val;
     },
     get publishableKey(): string {
-      return requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+      const val = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+      if (!val) {
+        throw new Error("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is not set");
+      }
+      return val;
     },
     get secretKey(): string {
       return requireEnv("SUPABASE_SECRET_KEY");
@@ -87,6 +95,15 @@ export const config = {
     },
     get redirectUri(): string {
       return requireEnv("TIKTOK_REDIRECT_URI");
+    },
+  },
+
+  features: {
+    get enableMeta(): boolean {
+      if (process.env.ENABLE_META !== undefined) {
+        return process.env.ENABLE_META === "true";
+      }
+      return process.env.NODE_ENV === "development";
     },
   },
 } as const;
