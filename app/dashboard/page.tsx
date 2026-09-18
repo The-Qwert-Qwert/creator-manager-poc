@@ -1,8 +1,24 @@
 import { redirect } from "next/navigation";
+import type { CSSProperties } from "react";
+
+import { refreshAccount } from "./actions";
+import { Sparkline } from "./sparkline";
+
+import { PLATFORMS, type AccountStatus, type Platform } from "@/lib/adapters/types";
+import { requireUser } from "@/lib/auth/session";
 import { config } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
-import { PLATFORMS, type Platform } from "@/lib/adapters/types";
-import { requireUser } from "@/lib/auth/session";
+import {
+  DELTA_NOTES,
+  DELTA_WINDOW_DAYS,
+  buildDashboardMetrics,
+  type Delta,
+  type SnapshotPoint,
+} from "@/lib/dashboard/metrics";
+import { cooldownLabel, cooldownRemainingMs } from "@/lib/dashboard/manual-refresh";
+
+const SPARKLINE_WINDOW_DAYS = 30;
+const MS_PER_DAY = 86_400_000;
 
 interface DashboardPageProps {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -12,6 +28,7 @@ interface PlatformMeta {
   name: string;
   icon: string;
   iconBg: string;
+  audienceLabel: string;
 }
 
 const PLATFORM_INFO: Record<Platform, PlatformMeta> = {
@@ -19,61 +36,132 @@ const PLATFORM_INFO: Record<Platform, PlatformMeta> = {
     name: "YouTube",
     icon: "▶",
     iconBg: "#dc2626",
+    audienceLabel: "Subscribers",
   },
   tiktok: {
     name: "TikTok",
     icon: "♪",
     iconBg: "#000000",
+    audienceLabel: "Followers",
   },
   instagram: {
     name: "Instagram",
     icon: "IG",
     iconBg: "linear-gradient(45deg, #f59e0b, #e11d48, #7c3aed)",
+    audienceLabel: "Followers",
   },
   facebook: {
     name: "Facebook",
     icon: "f",
     iconBg: "#2563eb",
+    audienceLabel: "Followers",
   },
 };
+
+const STATUS_INFO: Record<AccountStatus, { label: string; tone: "success" | "warning" }> = {
+  active: { label: "Active", tone: "success" },
+  needs_reconnect: { label: "Needs reconnect", tone: "warning" },
+  revoked: { label: "Access revoked", tone: "warning" },
+};
+
+const REFRESH_ERROR_MESSAGES: Record<string, string> = {
+  cooldown: "That account was already refreshed in the last hour. You can refresh it again shortly.",
+  expired: "The platform no longer accepts the saved login for that account. Reconnect it to continue.",
+  rate_limited: "The platform is rate-limiting us right now. The next scheduled run will pick it up.",
+  not_found: "The platform couldn't find a profile for that account.",
+  failed: "We couldn't refresh that account just now.",
+};
+
+function formatUpdated(capturedOn: string | null, now: Date): string {
+  if (!capturedOn) {
+    return "No snapshots yet";
+  }
+
+  const today = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
+  const captured = Date.parse(`${capturedOn.slice(0, 10)}T00:00:00Z`);
+  const days = Math.round((today - captured) / MS_PER_DAY);
+
+  if (days <= 0) return "Updated today";
+  if (days === 1) return "Updated yesterday";
+  return `Updated ${days} days ago`;
+}
+
+function DeltaSummary({ delta }: { delta: Delta }) {
+  if (!delta.available) {
+    return (
+      <p style={styles.deltaMuted}>
+        <span aria-hidden="true">—</span> {DELTA_NOTES[delta.reason]}
+      </p>
+    );
+  }
+
+  const direction = delta.value > 0 ? "Up" : delta.value < 0 ? "Down" : "No change";
+
+  return (
+    <p
+      style={{
+        ...styles.delta,
+        color:
+          delta.value > 0
+            ? "var(--success)"
+            : delta.value < 0
+              ? "var(--danger)"
+              : "var(--muted)",
+      }}
+      aria-label={`${direction} ${Math.abs(delta.value).toLocaleString()} versus ${DELTA_WINDOW_DAYS} days ago`}
+    >
+      <span aria-hidden="true">
+        {delta.value > 0 ? "▲ " : delta.value < 0 ? "▼ " : ""}
+        {delta.value > 0 ? "+" : delta.value < 0 ? "−" : ""}
+        {Math.abs(delta.value).toLocaleString()}
+      </span>
+      <span style={styles.deltaCaption}> vs {DELTA_WINDOW_DAYS} days ago</span>
+    </p>
+  );
+}
+
+function StatusChip({ status }: { status: AccountStatus }) {
+  const info = STATUS_INFO[status];
+
+  return (
+    <span
+      style={{
+        ...styles.statusChip,
+        color: `var(--${info.tone})`,
+        backgroundColor: `var(--${info.tone}-soft)`,
+      }}
+    >
+      {info.label}
+    </span>
+  );
+}
 
 export default async function DashboardPage(props: DashboardPageProps) {
   const { user, supabase } = await requireUser();
 
   const searchParams = props.searchParams ? await props.searchParams : {};
-  const connectedPlatform =
-    typeof searchParams.connected === "string"
-      ? searchParams.connected
-      : undefined;
-  const deniedPlatform =
-    typeof searchParams.denied === "string" ? searchParams.denied : undefined;
-  const errorParam =
-    typeof searchParams.error === "string" ? searchParams.error : undefined;
+  const readParam = (key: string): string | undefined => {
+    const value = searchParams[key];
+    return typeof value === "string" ? value : undefined;
+  };
 
-  // Fetch connected accounts with snapshots
+  const connectedPlatform = readParam("connected");
+  const deniedPlatform = readParam("denied");
+  const errorParam = readParam("error");
+  const refreshedPlatform = readParam("refreshed");
+  const refreshError = readParam("refresh");
+
+  // FR-4: the dashboard reads our DB only. No platform API is called on render.
   const { data: rawAccounts } = await supabase
     .from("connected_accounts")
     .select(
-      `
-      id,
-      platform,
-      external_id,
-      handle,
-      avatar_url,
-      status,
-      last_synced_at,
-      created_at,
-      metric_snapshots (
-        audience_count,
-        captured_on
-      )
-    `,
+      "id, platform, handle, avatar_url, status, last_manual_refresh_at",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
-  // Filter accounts behind feature flag (Requirement 6: flag-gated until Meta approval)
-  const accounts = (rawAccounts || []).filter((account) => {
+  // Flag-gated until Meta approval (CREAT-23)
+  const accounts = (rawAccounts ?? []).filter((account) => {
     if (
       !config.features.enableMeta &&
       (account.platform === "instagram" || account.platform === "facebook")
@@ -83,7 +171,6 @@ export default async function DashboardPage(props: DashboardPageProps) {
     return true;
   });
 
-  // Filter connectable platforms behind feature flag
   const connectablePlatforms = PLATFORMS.filter((platform) => {
     if (
       !config.features.enableMeta &&
@@ -94,10 +181,52 @@ export default async function DashboardPage(props: DashboardPageProps) {
     return true;
   });
 
-  const connectedMap = new Map<Platform, (typeof accounts)[0]>();
-  for (const acc of accounts) {
-    connectedMap.set(acc.platform as Platform, acc);
+  // One bounded read for the window the page actually shows
+  const snapshotsByAccount = new Map<string, SnapshotPoint[]>();
+  const accountIds = accounts.map((account) => account.id);
+  const now = new Date();
+
+  if (accountIds.length > 0) {
+    const since = new Date(now.getTime() - (SPARKLINE_WINDOW_DAYS - 1) * MS_PER_DAY)
+      .toISOString()
+      .slice(0, 10);
+
+    const { data: snapshots } = await supabase
+      .from("metric_snapshots")
+      .select("connected_account_id, audience_count, captured_on")
+      .in("connected_account_id", accountIds)
+      .gte("captured_on", since)
+      .order("captured_on", { ascending: true });
+
+    for (const snapshot of snapshots ?? []) {
+      const points = snapshotsByAccount.get(snapshot.connected_account_id) ?? [];
+      points.push({
+        capturedOn: snapshot.captured_on,
+        audienceCount: snapshot.audience_count,
+      });
+      snapshotsByAccount.set(snapshot.connected_account_id, points);
+    }
   }
+
+  const metrics = buildDashboardMetrics(
+    accounts.map((account) => ({
+      id: account.id,
+      platform: account.platform as Platform,
+      handle: account.handle,
+      avatarUrl: account.avatar_url,
+      status: account.status as AccountStatus,
+      snapshots: snapshotsByAccount.get(account.id) ?? [],
+    })),
+  );
+
+  const cooldowns = new Map<string, number>(
+    accounts.map((account) => [
+      account.id,
+      cooldownRemainingMs(account.last_manual_refresh_at, now),
+    ]),
+  );
+
+  const hasAnyAudience = metrics.rows.some((row) => row.audienceCount !== null);
 
   async function signOut() {
     "use server";
@@ -108,8 +237,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
   return (
     <div style={styles.pageWrap}>
-      <main style={styles.dashboardCard}>
-        {/* Header */}
+      <main style={styles.card}>
         <header style={styles.header}>
           <div>
             <div style={styles.titleRow}>
@@ -118,9 +246,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
             </div>
             <p style={styles.subtitle}>
               Signed in as{" "}
-              <strong style={{ color: "var(--foreground)" }}>
-                {user.email}
-              </strong>
+              <strong style={{ color: "var(--foreground)" }}>{user.email}</strong>
             </p>
           </div>
           <form action={signOut}>
@@ -130,30 +256,56 @@ export default async function DashboardPage(props: DashboardPageProps) {
           </form>
         </header>
 
-        {/* Notifications / Feedback */}
         {connectedPlatform && (
           <div style={styles.bannerSuccess} role="status">
-            <span style={styles.bannerIcon}>✓</span>
+            <span style={styles.bannerIcon} aria-hidden="true">
+              ✓
+            </span>
             <div>
               <strong>Connected!</strong> Successfully connected your{" "}
               <strong>
-                {PLATFORM_INFO[connectedPlatform as Platform]?.name ||
-                  connectedPlatform}
+                {PLATFORM_INFO[connectedPlatform as Platform]?.name || connectedPlatform}
               </strong>{" "}
               account.
             </div>
           </div>
         )}
 
+        {refreshedPlatform && (
+          <div style={styles.bannerSuccess} role="status">
+            <span style={styles.bannerIcon} aria-hidden="true">
+              ✓
+            </span>
+            <div>
+              <strong>Refreshed.</strong> Pulled the latest numbers for your{" "}
+              <strong>
+                {PLATFORM_INFO[refreshedPlatform as Platform]?.name || refreshedPlatform}
+              </strong>{" "}
+              account.
+            </div>
+          </div>
+        )}
+
+        {refreshError && (
+          <div style={styles.bannerWarning} role="alert">
+            <span style={styles.bannerIcon} aria-hidden="true">
+              ⚠
+            </span>
+            <div>
+              {REFRESH_ERROR_MESSAGES[refreshError] ?? REFRESH_ERROR_MESSAGES.failed}
+            </div>
+          </div>
+        )}
+
         {deniedPlatform && (
           <div style={styles.bannerWarning} role="alert">
-            <span style={styles.bannerIcon}>⚠</span>
+            <span style={styles.bannerIcon} aria-hidden="true">
+              ⚠
+            </span>
             <div>
-              <strong>Connection cancelled:</strong> Access was denied or
-              cancelled for{" "}
+              <strong>Connection cancelled:</strong> Access was denied or cancelled for{" "}
               <strong>
-                {PLATFORM_INFO[deniedPlatform as Platform]?.name ||
-                  deniedPlatform}
+                {PLATFORM_INFO[deniedPlatform as Platform]?.name || deniedPlatform}
               </strong>
               .
             </div>
@@ -162,204 +314,175 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
         {errorParam && (
           <div style={styles.bannerError} role="alert">
-            <span style={styles.bannerIcon}>✕</span>
+            <span style={styles.bannerIcon} aria-hidden="true">
+              ✕
+            </span>
             <div>
-              <strong>Connection error:</strong>{" "}
-              {formatErrorMessage(errorParam)}. Please try again.
+              <strong>Connection error:</strong> {formatErrorMessage(errorParam)}. Please try again.
             </div>
           </div>
         )}
 
-        {/* Connect Platforms Section (Requirement 1 & 2) */}
-        <section style={styles.section}>
-          <div style={{ marginBottom: "1rem" }}>
-            <h2 style={styles.sectionTitle}>Connect Platforms</h2>
-            <p style={styles.sectionDesc}>
-              Connect your social accounts to monitor all creator metrics in one
-              place.
-            </p>
-          </div>
-
-          <div style={styles.connectGrid}>
-            {connectablePlatforms.map((platform) => {
-              const meta = PLATFORM_INFO[platform];
-              const connectedAccount = connectedMap.get(platform);
-              const isConnected = Boolean(connectedAccount);
-
-              return (
-                <div key={platform} style={styles.connectCard}>
-                  <div style={styles.cardHeader}>
-                    <div style={styles.platformBadgeWrap}>
-                      <span
-                        style={{
-                          ...styles.platformIcon,
-                          background: meta.iconBg,
-                        }}
-                      >
-                        {meta.icon}
-                      </span>
-                      <strong style={styles.platformName}>{meta.name}</strong>
-                    </div>
-
-                    {isConnected && (
-                      <span style={styles.connectedBadge}>Active</span>
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: "auto", paddingTop: "0.75rem" }}>
-                    {isConnected ? (
-                      <div style={styles.connectedDetails}>
-                        <span style={styles.accountHandle}>
-                          @{connectedAccount?.handle}
-                        </span>
-                        <a
-                          href={`/api/auth/${platform}`}
-                          style={styles.reconnectBtn}
-                          aria-label={`Reconnect ${meta.name}`}
-                        >
-                          Reconnect
-                        </a>
-                      </div>
-                    ) : (
-                      <a
-                        href={`/api/auth/${platform}`}
-                        style={styles.connectBtn}
-                        aria-label={`Connect ${meta.name}`}
-                      >
-                        Connect {meta.name}
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* Combined audience — FSD §6 */}
+        <section style={styles.summary} aria-labelledby="audience-heading">
+          <h2 id="audience-heading" style={styles.summaryLabel}>
+            {metrics.combinedAudienceLabel}
+          </h2>
+          <p style={styles.summaryValue}>
+            {hasAnyAudience ? metrics.combinedAudience.toLocaleString() : "—"}
+          </p>
+          <DeltaSummary delta={metrics.delta} />
+          <p style={styles.summaryNote}>{metrics.combinedAudienceNote}</p>
         </section>
 
-        {/* Connected Platform Rows (Requirement 3, 4, 6) */}
-        <section style={styles.section}>
-          <div style={styles.tableHeaderRow}>
-            <h2 style={styles.sectionTitle}>Connected Accounts</h2>
+        {/* Per-platform rows — FR-4, FR-6, FR-10 */}
+        <section style={styles.section} aria-labelledby="accounts-heading">
+          <div style={styles.sectionHeaderRow}>
+            <h2 id="accounts-heading" style={styles.sectionTitle}>
+              Your platforms
+            </h2>
             <span style={styles.countBadge}>
               {accounts.length} {accounts.length === 1 ? "account" : "accounts"}
             </span>
           </div>
 
-          {accounts.length === 0 ? (
+          {metrics.rows.length === 0 ? (
             <div style={styles.emptyState}>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.875rem",
-                  color: "var(--muted)",
-                }}
-              >
-                No platforms connected yet. Click any button above to connect
-                your first account.
+              <p style={styles.emptyText}>
+                No platforms connected yet. Connect one below — we&apos;ll start recording a
+                daily snapshot from today.
               </p>
             </div>
           ) : (
-            <div style={styles.tableWrap}>
-              <table style={styles.table}>
-                <thead>
-                  <tr style={styles.trHead}>
-                    <th style={styles.th}>Platform</th>
-                    <th style={styles.th}>Account</th>
-                    <th style={styles.th}>Audience</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Last Synced</th>
-                    <th style={styles.th}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accounts.map((acc) => {
-                    const meta = PLATFORM_INFO[acc.platform as Platform];
-                    const snapshots = acc.metric_snapshots || [];
-                    const latestSnapshot = [...snapshots].sort(
-                      (a, b) =>
-                        new Date(b.captured_on).getTime() -
-                        new Date(a.captured_on).getTime(),
-                    )[0];
-                    const audience = latestSnapshot
-                      ? latestSnapshot.audience_count.toLocaleString()
-                      : "—";
-                    const lastSynced = acc.last_synced_at
-                      ? new Date(acc.last_synced_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "Just now";
+            <ul style={styles.accountList}>
+              {metrics.rows.map((row) => {
+                const meta = PLATFORM_INFO[row.platform];
+                const remaining = cooldowns.get(row.id) ?? 0;
+                const isReconnectable = row.status !== "active";
 
-                    return (
-                      <tr key={acc.id} style={styles.tr}>
-                        <td style={styles.td}>
-                          <span style={styles.platformPill}>
-                            <span
-                              style={{
-                                ...styles.platformCircle,
-                                background: meta?.iconBg || "#333",
-                              }}
-                            >
-                              {meta?.icon || ""}
-                            </span>
-                            {meta?.name || acc.platform}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={styles.userCell}>
-                            {acc.avatar_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={acc.avatar_url}
-                                alt=""
-                                style={styles.avatar}
-                              />
-                            ) : (
-                              <div style={styles.avatarFallback}>
-                                {acc.handle.slice(0, 1).toUpperCase()}
-                              </div>
-                            )}
-                            <span style={styles.boldHandle}>@{acc.handle}</span>
-                          </div>
-                        </td>
-                        <td
-                          style={{
-                            ...styles.td,
-                            fontFamily: "monospace",
-                            fontWeight: 600,
-                          }}
+                return (
+                  <li key={row.id} style={styles.accountRow}>
+                    {isReconnectable && (
+                      <div style={styles.reconnectBanner}>
+                        <span style={styles.bannerIcon} aria-hidden="true">
+                          ⚠
+                        </span>
+                        <div style={styles.reconnectCopy}>
+                          <strong>
+                            {meta.name}{" "}
+                            {row.status === "revoked"
+                              ? "access was revoked — reconnect"
+                              : "connection expired — reconnect"}
+                          </strong>
+                          <p style={styles.reconnectNote}>
+                            We keep showing the last numbers we captured until you do.
+                          </p>
+                        </div>
+                        <a
+                          href={`/api/auth/${row.platform}`}
+                          style={styles.buttonPrimary}
+                          aria-label={`Reconnect ${meta.name}`}
                         >
-                          {audience}
-                        </td>
-                        <td style={styles.td}>
-                          <span style={styles.statusActive}>
-                            ● {acc.status}
-                          </span>
-                        </td>
-                        <td
-                          style={{
-                            ...styles.td,
-                            color: "var(--muted)",
-                            fontSize: "0.8125rem",
-                          }}
+                          Reconnect {meta.name}
+                        </a>
+                      </div>
+                    )}
+
+                    <div style={styles.identity}>
+                      <span
+                        style={{ ...styles.platformIcon, background: meta.iconBg }}
+                        aria-hidden="true"
+                      >
+                        {meta.icon}
+                      </span>
+                      <div>
+                        <p style={styles.accountName}>{meta.name}</p>
+                        <p style={styles.accountHandle}>@{row.handle}</p>
+                      </div>
+                    </div>
+
+                    <div style={styles.metricBlock}>
+                      <p style={styles.metricValue}>
+                        {row.audienceCount === null ? "—" : row.audienceCount.toLocaleString()}
+                      </p>
+                      <p style={styles.metricLabel}>{meta.audienceLabel}</p>
+                      <DeltaSummary delta={row.delta} />
+                    </div>
+
+                    <div style={styles.trendBlock}>
+                      <Sparkline points={row.sparkline} platformLabel={meta.name} />
+                      <p style={styles.trendCaption}>Last {SPARKLINE_WINDOW_DAYS} days</p>
+                    </div>
+
+                    <div style={styles.metaBlock}>
+                      <StatusChip status={row.status} />
+                      <p style={styles.lastUpdated}>
+                        <time dateTime={row.lastUpdated ?? undefined}>
+                          {formatUpdated(row.lastUpdated, now)}
+                        </time>
+                      </p>
+                      {row.gatedNotice && <p style={styles.gatedNotice}>{row.gatedNotice}</p>}
+
+                      <form action={refreshAccount} style={styles.refreshForm}>
+                        <input type="hidden" name="accountId" value={row.id} />
+                        <button
+                          type="submit"
+                          disabled={remaining > 0}
+                          style={remaining > 0 ? styles.buttonDisabled : styles.buttonSecondary}
+                          aria-label={`Refresh ${meta.name} account now`}
                         >
-                          {lastSynced}
-                        </td>
-                        <td style={styles.td}>
-                          <a
-                            href={`/api/auth/${acc.platform}`}
-                            style={styles.tableActionLink}
-                          >
-                            Reconnect
-                          </a>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          {remaining > 0 ? cooldownLabel(remaining) : "Refresh now"}
+                        </button>
+                      </form>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
+        </section>
+
+        {/* Connect platforms — CREAT-23 */}
+        <section style={styles.section} aria-labelledby="connect-heading">
+          <div style={styles.sectionHeaderRow}>
+            <h2 id="connect-heading" style={styles.sectionTitle}>
+              Connect more platforms
+            </h2>
+          </div>
+          <p style={styles.sectionDesc}>
+            One platform is enough to be useful — connect more whenever you like.
+          </p>
+
+          <div style={styles.connectGrid}>
+            {connectablePlatforms.map((platform) => {
+              const meta = PLATFORM_INFO[platform];
+              const isConnected = accounts.some((account) => account.platform === platform);
+
+              return (
+                <div key={platform} style={styles.connectCard}>
+                  <div style={styles.cardHeader}>
+                    <div style={styles.platformBadgeWrap}>
+                      <span style={{ ...styles.platformIcon, background: meta.iconBg }} aria-hidden="true">
+                        {meta.icon}
+                      </span>
+                      <strong style={styles.platformName}>{meta.name}</strong>
+                    </div>
+                    {isConnected && <span style={styles.connectedBadge}>Connected</span>}
+                  </div>
+
+                  <div style={{ marginTop: "auto", paddingTop: "0.75rem" }}>
+                    <a
+                      href={`/api/auth/${platform}`}
+                      style={isConnected ? styles.reconnectBtn : styles.connectBtn}
+                      aria-label={isConnected ? `Reconnect ${meta.name}` : `Connect ${meta.name}`}
+                    >
+                      {isConnected ? "Reconnect" : `Connect ${meta.name}`}
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       </main>
     </div>
@@ -385,13 +508,13 @@ function formatErrorMessage(code: string): string {
   }
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles = {
   pageWrap: {
     maxWidth: 960,
     margin: "0 auto",
     padding: "2.5rem 1rem",
   },
-  dashboardCard: {
+  card: {
     backgroundColor: "var(--card)",
     color: "var(--foreground)",
     border: "1px solid var(--border)",
@@ -413,6 +536,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "0.5rem",
+    flexWrap: "wrap",
   },
   title: {
     margin: 0,
@@ -426,7 +550,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "0.15rem 0.5rem",
     borderRadius: 9999,
     backgroundColor: "rgba(37, 99, 235, 0.1)",
-    color: "#2563eb",
+    color: "var(--primary)",
   },
   subtitle: {
     margin: "0.35rem 0 0",
@@ -434,6 +558,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "0.875rem",
   },
   signOutBtn: {
+    minHeight: 44,
     padding: "0.45rem 0.9rem",
     border: "1px solid var(--border)",
     borderRadius: 8,
@@ -442,10 +567,16 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "0.8125rem",
     fontWeight: 500,
     color: "var(--foreground)",
-    transition: "background-color 0.15s",
   },
   section: {
     marginBottom: "2rem",
+  },
+  sectionHeaderRow: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: "0.75rem",
+    flexWrap: "wrap",
   },
   sectionTitle: {
     fontSize: "1.125rem",
@@ -453,14 +584,230 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   sectionDesc: {
-    margin: "0.25rem 0 0",
+    margin: "0.25rem 0 0.85rem",
     color: "var(--muted)",
     fontSize: "0.8125rem",
+  },
+  countBadge: {
+    fontSize: "0.75rem",
+    color: "var(--muted)",
+  },
+  summary: {
+    border: "1px solid var(--border)",
+    borderRadius: 14,
+    padding: "1.25rem 1.35rem",
+    backgroundColor: "var(--muted-background)",
+    marginBottom: "2rem",
+  },
+  summaryLabel: {
+    margin: 0,
+    fontSize: "0.875rem",
+    fontWeight: 600,
+    color: "var(--muted)",
+  },
+  summaryValue: {
+    margin: "0.35rem 0 0.15rem",
+    fontSize: "2.75rem",
+    fontWeight: 700,
+    letterSpacing: "-0.03em",
+    lineHeight: 1.1,
+    fontVariantNumeric: "tabular-nums",
+  },
+  summaryNote: {
+    margin: "0.6rem 0 0",
+    fontSize: "0.75rem",
+    color: "var(--muted)",
+    maxWidth: "48ch",
+  },
+  delta: {
+    margin: "0.25rem 0 0",
+    fontSize: "0.875rem",
+    fontWeight: 600,
+  },
+  deltaMuted: {
+    margin: "0.25rem 0 0",
+    fontSize: "0.8125rem",
+    fontWeight: 500,
+    color: "var(--muted)",
+  },
+  deltaCaption: {
+    fontWeight: 400,
+    color: "var(--muted)",
+  },
+  accountList: {
+    listStyle: "none",
+    margin: "0.85rem 0 0",
+    padding: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.85rem",
+  },
+  accountRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: "1rem",
+    alignItems: "center",
+    border: "1px solid var(--border)",
+    borderRadius: 14,
+    padding: "1rem 1.15rem",
+  },
+  reconnectBanner: {
+    gridColumn: "1 / -1",
+    display: "flex",
+    alignItems: "center",
+    gap: "0.75rem",
+    flexWrap: "wrap",
+    backgroundColor: "var(--warning-soft)",
+    border: "1px solid var(--warning)",
+    borderRadius: 10,
+    padding: "0.7rem 0.85rem",
+    color: "var(--warning)",
+    fontSize: "0.8125rem",
+  },
+  reconnectCopy: {
+    flex: "1 1 220px",
+  },
+  reconnectNote: {
+    margin: "0.15rem 0 0",
+    fontSize: "0.75rem",
+    color: "var(--muted)",
+  },
+  identity: {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.6rem",
+    minWidth: 0,
+  },
+  platformIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    color: "#ffffff",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "0.8125rem",
+    fontWeight: 900,
+    flexShrink: 0,
+  },
+  accountName: {
+    margin: 0,
+    fontWeight: 600,
+    fontSize: "0.9375rem",
+  },
+  accountHandle: {
+    margin: "0.1rem 0 0",
+    fontSize: "0.8125rem",
+    color: "var(--muted)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  metricBlock: {
+    minWidth: 0,
+  },
+  metricValue: {
+    margin: 0,
+    fontSize: "1.5rem",
+    fontWeight: 700,
+    fontVariantNumeric: "tabular-nums",
+    lineHeight: 1.2,
+  },
+  metricLabel: {
+    margin: "0.1rem 0 0",
+    fontSize: "0.75rem",
+    color: "var(--muted)",
+  },
+  trendBlock: {
+    minWidth: 0,
+  },
+  trendCaption: {
+    margin: "0.3rem 0 0",
+    fontSize: "0.6875rem",
+    color: "var(--muted)",
+  },
+  metaBlock: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "0.4rem",
+    minWidth: 0,
+  },
+  statusChip: {
+    display: "inline-block",
+    padding: "0.2rem 0.5rem",
+    borderRadius: 9999,
+    fontSize: "0.75rem",
+    fontWeight: 600,
+  },
+  lastUpdated: {
+    margin: 0,
+    fontSize: "0.75rem",
+    color: "var(--muted)",
+  },
+  gatedNotice: {
+    margin: 0,
+    fontSize: "0.75rem",
+    color: "var(--muted)",
+    maxWidth: "42ch",
+  },
+  refreshForm: {
+    marginTop: "0.15rem",
+  },
+  buttonPrimary: {
+    minHeight: 44,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0.55rem 0.9rem",
+    backgroundColor: "var(--primary)",
+    color: "#ffffff",
+    textDecoration: "none",
+    border: "none",
+    borderRadius: 8,
+    fontWeight: 600,
+    fontSize: "0.8125rem",
+    cursor: "pointer",
+  },
+  buttonSecondary: {
+    minHeight: 44,
+    padding: "0.55rem 0.9rem",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    backgroundColor: "transparent",
+    color: "var(--foreground)",
+    fontWeight: 600,
+    fontSize: "0.8125rem",
+    cursor: "pointer",
+  },
+  buttonDisabled: {
+    minHeight: 44,
+    padding: "0.55rem 0.9rem",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    backgroundColor: "transparent",
+    color: "var(--muted)",
+    fontWeight: 500,
+    fontSize: "0.8125rem",
+    cursor: "not-allowed",
+  },
+  emptyState: {
+    border: "1px dashed var(--border)",
+    borderRadius: 12,
+    padding: "2.25rem 1rem",
+    textAlign: "center",
+    marginTop: "0.85rem",
+  },
+  emptyText: {
+    margin: 0,
+    fontSize: "0.875rem",
+    color: "var(--muted)",
   },
   connectGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
     gap: "0.875rem",
+    marginTop: "0.85rem",
   },
   connectCard: {
     border: "1px solid var(--border)",
@@ -483,17 +830,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "0.5rem",
   },
-  platformIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    color: "#ffffff",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "0.75rem",
-    fontWeight: 900,
-  },
   platformName: {
     fontSize: "0.9375rem",
     fontWeight: 600,
@@ -503,91 +839,67 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     padding: "0.15rem 0.45rem",
     borderRadius: 9999,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
-    color: "#059669",
-  },
-  flagBadgeWarning: {
-    fontSize: "0.6875rem",
-    padding: "0.15rem 0.4rem",
-    borderRadius: 4,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    color: "#d97706",
-    fontWeight: 500,
-  },
-  flagBadgeDev: {
-    fontSize: "0.6875rem",
-    padding: "0.15rem 0.4rem",
-    borderRadius: 4,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
-    color: "#059669",
-    fontWeight: 500,
-  },
-  connectedDetails: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  accountHandle: {
-    fontSize: "0.8125rem",
-    color: "var(--foreground)",
-    fontWeight: 500,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    maxWidth: "100px",
+    backgroundColor: "var(--success-soft)",
+    color: "var(--success)",
   },
   connectBtn: {
-    display: "block",
-    textAlign: "center",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
     padding: "0.55rem 0.75rem",
     backgroundColor: "var(--primary)",
     color: "#ffffff",
     textDecoration: "none",
     borderRadius: 8,
-    fontWeight: 500,
+    fontWeight: 600,
     fontSize: "0.8125rem",
   },
   reconnectBtn: {
-    fontSize: "0.75rem",
-    color: "var(--primary)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    padding: "0.55rem 0.75rem",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    backgroundColor: "transparent",
+    color: "var(--foreground)",
     textDecoration: "none",
     fontWeight: 600,
-    padding: "0.3rem 0.55rem",
-    border: "1px solid var(--border)",
-    borderRadius: 6,
-    backgroundColor: "rgba(37, 99, 235, 0.08)",
+    fontSize: "0.8125rem",
   },
   bannerSuccess: {
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
-    color: "#047857",
-    border: "1px solid rgba(16, 185, 129, 0.25)",
+    backgroundColor: "var(--success-soft)",
+    color: "var(--success)",
+    border: "1px solid var(--success)",
     borderRadius: 10,
     padding: "0.75rem 1rem",
-    marginBottom: "1.5rem",
+    marginBottom: "1.25rem",
     display: "flex",
     alignItems: "center",
     gap: "0.6rem",
     fontSize: "0.8125rem",
   },
   bannerWarning: {
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    color: "#b45309",
-    border: "1px solid rgba(245, 158, 11, 0.25)",
+    backgroundColor: "var(--warning-soft)",
+    color: "var(--warning)",
+    border: "1px solid var(--warning)",
     borderRadius: 10,
     padding: "0.75rem 1rem",
-    marginBottom: "1.5rem",
+    marginBottom: "1.25rem",
     display: "flex",
     alignItems: "center",
     gap: "0.6rem",
     fontSize: "0.8125rem",
   },
   bannerError: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    color: "#b91c1c",
-    border: "1px solid rgba(239, 68, 68, 0.25)",
+    backgroundColor: "var(--danger-soft)",
+    color: "var(--danger)",
+    border: "1px solid var(--danger)",
     borderRadius: 10,
     padding: "0.75rem 1rem",
-    marginBottom: "1.5rem",
+    marginBottom: "1.25rem",
     display: "flex",
     alignItems: "center",
     gap: "0.6rem",
@@ -597,110 +909,4 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "1rem",
     fontWeight: "bold",
   },
-  tableHeaderRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "0.75rem",
-  },
-  countBadge: {
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-  },
-  emptyState: {
-    border: "1px dashed var(--border)",
-    borderRadius: 12,
-    padding: "2.5rem 1rem",
-    textAlign: "center",
-  },
-  tableWrap: {
-    overflowX: "auto",
-    border: "1px solid var(--border)",
-    borderRadius: 12,
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-    textAlign: "left",
-    fontSize: "0.8125rem",
-  },
-  trHead: {
-    backgroundColor: "var(--muted-background)",
-    borderBottom: "1px solid var(--border)",
-  },
-  th: {
-    padding: "0.65rem 1rem",
-    color: "var(--muted)",
-    fontWeight: 600,
-    fontSize: "0.75rem",
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-  },
-  td: {
-    padding: "0.75rem 1rem",
-    borderBottom: "1px solid var(--border)",
-    verticalAlign: "middle",
-  },
-  tr: {
-    backgroundColor: "transparent",
-  },
-  platformPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "0.45rem",
-    fontWeight: 500,
-  },
-  platformCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: "50%",
-    color: "#ffffff",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "0.625rem",
-    fontWeight: 900,
-  },
-  userCell: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-  },
-  avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: "50%",
-    objectFit: "cover",
-    border: "1px solid var(--border)",
-  },
-  avatarFallback: {
-    width: 24,
-    height: 24,
-    borderRadius: "50%",
-    backgroundColor: "var(--muted-background)",
-    border: "1px solid var(--border)",
-    color: "var(--muted)",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "0.7rem",
-    fontWeight: 600,
-  },
-  boldHandle: {
-    fontWeight: 600,
-  },
-  statusActive: {
-    display: "inline-block",
-    padding: "0.15rem 0.45rem",
-    borderRadius: 9999,
-    fontSize: "0.75rem",
-    fontWeight: 600,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
-    color: "#059669",
-  },
-  tableActionLink: {
-    color: "var(--primary)",
-    textDecoration: "none",
-    fontWeight: 600,
-  },
-};
+} satisfies Record<string, CSSProperties>;

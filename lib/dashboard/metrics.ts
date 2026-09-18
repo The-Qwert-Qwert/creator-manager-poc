@@ -1,4 +1,4 @@
-import { PLATFORMS, type Platform } from "@/lib/adapters/types";
+import { PLATFORMS, type AccountStatus, type Platform } from "@/lib/adapters/types";
 
 export const DELTA_WINDOW_DAYS = 7;
 export const SPARKLINE_POINTS = 30;
@@ -15,6 +15,31 @@ export const DELTA_NOTES: Record<DeltaReason, string> = {
   building_history: "Building history",
   gap: `No snapshot ${DELTA_WINDOW_DAYS} days ago`,
 };
+
+export const GATED_METRICS_THRESHOLD = 100;
+
+/** FSD §9.3/§9.4: the insight metrics each platform withholds below the gate. */
+const GATED_METRICS: Partial<Record<Platform, { hidden: string; thresholdUnit: string }>> = {
+  instagram: { hidden: "Reach and impressions", thresholdUnit: "followers" },
+  facebook: { hidden: "Page insights", thresholdUnit: "Page likes" },
+};
+
+/**
+ * FR-7: when a platform withholds a metric, show the numbers we do have plus a
+ * plain-language note — never an empty widget.
+ */
+export function gatedMetricsNotice(
+  platform: Platform,
+  audienceCount: number | null,
+): string | null {
+  const gate = GATED_METRICS[platform];
+
+  if (!gate || audienceCount === null || audienceCount >= GATED_METRICS_THRESHOLD) {
+    return null;
+  }
+
+  return `${gate.hidden} stay hidden until you have ${GATED_METRICS_THRESHOLD} ${gate.thresholdUnit} — showing your audience count only.`;
+}
 
 export type Delta =
   | { available: true; value: number; from: string; to: string }
@@ -33,6 +58,7 @@ export interface DashboardAccount {
   platform: Platform;
   handle: string;
   avatarUrl?: string | null;
+  status: AccountStatus;
   snapshots: readonly SnapshotPoint[];
 }
 
@@ -41,10 +67,12 @@ export interface DashboardRow {
   platform: Platform;
   handle: string;
   avatarUrl: string | null;
+  status: AccountStatus;
   audienceCount: number | null;
   delta: Delta;
   lastUpdated: string | null;
   sparkline: SnapshotPoint[];
+  gatedNotice: string | null;
 }
 
 export interface DashboardMetrics {
@@ -156,12 +184,14 @@ function toRow(account: DashboardAccount): DashboardRow {
     platform: account.platform,
     handle: account.handle,
     avatarUrl: account.avatarUrl ?? null,
+    status: account.status,
     audienceCount: latest?.audienceCount ?? null,
     delta: accountDelta(sorted),
     lastUpdated: latest?.capturedOn ?? null,
     sparkline: sorted
       .slice(-SPARKLINE_POINTS)
       .map(({ capturedOn, audienceCount }) => ({ capturedOn, audienceCount })),
+    gatedNotice: gatedMetricsNotice(account.platform, latest?.audienceCount ?? null),
   };
 }
 
