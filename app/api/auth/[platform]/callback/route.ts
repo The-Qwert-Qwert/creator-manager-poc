@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { PLATFORMS, type Platform } from "@/lib/adapters/types";
 import { getAdapter, registerDefaultAdapters } from "@/lib/adapters/registry";
 import { verifyState } from "@/lib/auth/state";
+import { config } from "@/lib/config";
 import { encryptToken } from "@/lib/token-crypto";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,6 +14,11 @@ export async function GET(
 
   if (!PLATFORMS.includes(platform as Platform)) {
     return NextResponse.json({ error: `Unknown platform: ${platform}` }, { status: 404 });
+  }
+
+  const isMeta = platform === "instagram" || platform === "facebook";
+  if (isMeta && !config.features.enableMeta) {
+    return NextResponse.json({ error: `Platform is currently disabled: ${platform}` }, { status: 404 });
   }
 
   const { searchParams } = new URL(request.url);

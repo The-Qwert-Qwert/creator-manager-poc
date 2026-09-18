@@ -87,6 +87,7 @@ describe("Connect Flow", () => {
     vi.stubEnv("META_FB_CLIENT_SECRET", "fb-secret");
     vi.stubEnv("META_FB_REDIRECT_URI", "http://localhost:3000/api/auth/facebook/callback");
     vi.stubEnv("META_GRAPH_VERSION", "v21.0");
+    vi.stubEnv("ENABLE_META", "true");
 
     mockUser = { id: "user-123", email: "creator@example.com" };
     mockUpsertResult = { data: { id: "account-uuid-1" }, error: null };
@@ -155,6 +156,18 @@ describe("Connect Flow", () => {
         const url = new URL(location!);
         expect(url.searchParams.get("state")).toBeDefined();
       }
+    });
+
+    it("redirects to /dashboard with missing_credentials error if provider credentials are not set", async () => {
+      vi.stubEnv("GOOGLE_CLIENT_ID", "");
+      const request = new NextRequest("http://localhost:3000/api/auth/youtube");
+      const res = await startHandler(request, { params: Promise.resolve({ platform: "youtube" }) });
+
+      expect(res.status).toBe(307);
+      const location = res.headers.get("location");
+      expect(location).toContain("/dashboard");
+      expect(location).toContain("platform=youtube");
+      expect(location).toContain("error=missing_credentials");
     });
   });
 
@@ -382,6 +395,52 @@ describe("Connect Flow", () => {
 
       const withMeta = filterAccounts(allAccounts, true);
       expect(withMeta.map((a) => a.platform)).toEqual(["youtube", "tiktok", "instagram", "facebook"]);
+    });
+
+    it("hides Instagram and Facebook connect cards when enableMeta is false", () => {
+      const getConnectablePlatforms = (enableMeta: boolean) =>
+        PLATFORMS.filter((platform) => {
+          if (!enableMeta && (platform === "instagram" || platform === "facebook")) {
+            return false;
+          }
+          return true;
+        });
+
+      const withoutMeta = getConnectablePlatforms(false);
+      expect(withoutMeta).toEqual(["youtube", "tiktok"]);
+
+      const withMeta = getConnectablePlatforms(true);
+      expect(withMeta).toEqual(["youtube", "tiktok", "instagram", "facebook"]);
+    });
+
+    it("returns 404 from startHandler for Meta platforms when ENABLE_META=false", async () => {
+      vi.stubEnv("ENABLE_META", "false");
+
+      for (const platform of ["instagram", "facebook"]) {
+        const request = new NextRequest(`http://localhost:3000/api/auth/${platform}`);
+        const res = await startHandler(request, {
+          params: Promise.resolve({ platform }),
+        });
+
+        expect(res.status).toBe(404);
+        const data = await res.json();
+        expect(data.error).toContain("Platform is currently disabled");
+      }
+    });
+
+    it("returns 404 from callbackHandler for Meta platforms when ENABLE_META=false", async () => {
+      vi.stubEnv("ENABLE_META", "false");
+
+      for (const platform of ["instagram", "facebook"]) {
+        const request = new NextRequest(`http://localhost:3000/api/auth/${platform}/callback?code=123&state=abc`);
+        const res = await callbackHandler(request, {
+          params: Promise.resolve({ platform }),
+        });
+
+        expect(res.status).toBe(404);
+        const data = await res.json();
+        expect(data.error).toContain("Platform is currently disabled");
+      }
     });
   });
 });
