@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FacebookAdapter, facebookAdapter } from "@/lib/adapters/facebook";
 import { AdapterError, type ConnectedAccount } from "@/lib/adapters/types";
+import { errorRecording, facebookRecording, recordedBody } from "./fixtures";
 
 describe("FacebookAdapter", () => {
   const originalFetch = global.fetch;
@@ -80,10 +81,7 @@ describe("FacebookAdapter", () => {
         ) {
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                access_token: "short_lived_user_token_123",
-                token_type: "bearer",
-              }),
+              JSON.stringify(recordedBody(facebookRecording.exchangeCode.success, 0)),
               { status: 200, headers: { "Content-Type": "application/json" } }
             )
           );
@@ -99,11 +97,7 @@ describe("FacebookAdapter", () => {
         ) {
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                access_token: "long_lived_user_token_456",
-                token_type: "bearer",
-                expires_in: 5183944,
-              }),
+              JSON.stringify(recordedBody(facebookRecording.exchangeCode.success, 1)),
               { status: 200, headers: { "Content-Type": "application/json" } }
             )
           );
@@ -117,20 +111,7 @@ describe("FacebookAdapter", () => {
         ) {
           return Promise.resolve(
             new Response(
-              JSON.stringify({
-                data: [
-                  {
-                    id: "page_12345",
-                    name: "Awesome Creator Page",
-                    access_token: "permanent_page_access_token_789",
-                    picture: {
-                      data: {
-                        url: "https://lookaside.fbsbx.com/picture.jpg",
-                      },
-                    },
-                  },
-                ],
-              }),
+              JSON.stringify(recordedBody(facebookRecording.exchangeCode.success, 2)),
               { status: 200, headers: { "Content-Type": "application/json" } }
             )
           );
@@ -158,31 +139,32 @@ describe("FacebookAdapter", () => {
     it("throws NOT_FOUND when user manages no Facebook Pages", async () => {
       global.fetch = vi.fn().mockImplementation((url: string) => {
         const parsed = new URL(url);
+        const notFound = errorRecording(facebookRecording, "exchangeCode", "notFound");
 
         if (parsed.searchParams.get("code") === "code-no-pages") {
           return Promise.resolve(
-            new Response(
-              JSON.stringify({ access_token: "short_token" }),
-              { status: 200, headers: { "Content-Type": "application/json" } }
-            )
+            new Response(JSON.stringify(recordedBody(notFound, 0)), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
           );
         }
 
         if (parsed.searchParams.get("grant_type") === "fb_exchange_token") {
           return Promise.resolve(
-            new Response(
-              JSON.stringify({ access_token: "long_token" }),
-              { status: 200, headers: { "Content-Type": "application/json" } }
-            )
+            new Response(JSON.stringify(recordedBody(notFound, 1)), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
           );
         }
 
         if (parsed.pathname === "/v21.0/me/accounts") {
           return Promise.resolve(
-            new Response(
-              JSON.stringify({ data: [] }),
-              { status: 200, headers: { "Content-Type": "application/json" } }
-            )
+            new Response(JSON.stringify(recordedBody(notFound, 2)), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
           );
         }
 
@@ -203,13 +185,7 @@ describe("FacebookAdapter", () => {
     it("throws UPSTREAM_ERROR when step 1 authorization code exchange fails", async () => {
       global.fetch = vi.fn().mockResolvedValue(
         new Response(
-          JSON.stringify({
-            error: {
-              message: "Invalid verification code format.",
-              type: "OAuthException",
-              code: 100,
-            },
-          }),
+          JSON.stringify(recordedBody(errorRecording(facebookRecording, "exchangeCode", "upstream"), 0)),
           { status: 400, headers: { "Content-Type": "application/json" } }
         )
       );
@@ -386,17 +362,7 @@ describe("FacebookAdapter", () => {
 
         return Promise.resolve(
           new Response(
-            JSON.stringify({
-              id: "page_12345",
-              name: "Creator's FB Page",
-              followers_count: 8500,
-              fan_count: 8200,
-              picture: {
-                data: {
-                  url: "https://lookaside.fbsbx.com/page-avatar.jpg",
-                },
-              },
-            }),
+            JSON.stringify(recordedBody(facebookRecording.fetchProfile.success, 0)),
             { status: 200, headers: { "Content-Type": "application/json" } }
           )
         );
@@ -453,14 +419,7 @@ describe("FacebookAdapter", () => {
     it("throws REVOKED when receiving OAuthException code 190 on HTTP 400", async () => {
       global.fetch = vi.fn().mockResolvedValue(
         new Response(
-          JSON.stringify({
-            error: {
-              message: "Error validating access token: Session has expired.",
-              type: "OAuthException",
-              code: 190,
-              error_subcode: 463,
-            },
-          }),
+          JSON.stringify(recordedBody(errorRecording(facebookRecording, "fetchProfile", "revoked"), 0)),
           { status: 400, headers: { "Content-Type": "application/json" } }
         )
       );
@@ -479,11 +438,7 @@ describe("FacebookAdapter", () => {
     it("throws REVOKED on HTTP 401 response", async () => {
       global.fetch = vi.fn().mockResolvedValue(
         new Response(
-          JSON.stringify({
-            error: {
-              message: "Unauthorized token",
-            },
-          }),
+          JSON.stringify(recordedBody(errorRecording(facebookRecording, "fetchProfile", "unauthorized"), 0)),
           { status: 401, headers: { "Content-Type": "application/json" } }
         )
       );
@@ -526,10 +481,10 @@ describe("FacebookAdapter", () => {
 
     it("throws RATE_LIMITED on HTTP 429", async () => {
       global.fetch = vi.fn().mockResolvedValue(
-        new Response("Too Many Requests", {
-          status: 429,
-          statusText: "Too Many Requests",
-        })
+        new Response(
+          JSON.stringify(recordedBody(errorRecording(facebookRecording, "fetchProfile", "rateLimited"), 0)),
+          { status: 429, statusText: "Too Many Requests", headers: { "Content-Type": "application/json" } }
+        )
       );
 
       await expect(
@@ -572,10 +527,10 @@ describe("FacebookAdapter", () => {
 
     it("throws NOT_FOUND on HTTP 404", async () => {
       global.fetch = vi.fn().mockResolvedValue(
-        new Response("Not Found", {
-          status: 404,
-          statusText: "Not Found",
-        })
+        new Response(
+          JSON.stringify(recordedBody(errorRecording(facebookRecording, "fetchProfile", "notFound"), 0)),
+          { status: 404, statusText: "Not Found", headers: { "Content-Type": "application/json" } }
+        )
       );
 
       await expect(
@@ -612,10 +567,10 @@ describe("FacebookAdapter", () => {
 
     it("throws UPSTREAM_ERROR on generic HTTP 500 error", async () => {
       global.fetch = vi.fn().mockResolvedValue(
-        new Response("Internal Server Error", {
-          status: 500,
-          statusText: "Internal Server Error",
-        })
+        new Response(
+          JSON.stringify(recordedBody(errorRecording(facebookRecording, "fetchProfile", "upstream"), 0)),
+          { status: 500, statusText: "Internal Server Error", headers: { "Content-Type": "application/json" } }
+        )
       );
 
       await expect(

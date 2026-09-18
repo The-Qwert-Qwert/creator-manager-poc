@@ -1,0 +1,145 @@
+{
+  "exchangeCode": {
+    "success": [
+      {
+        "status": 200,
+        "body": {
+          "access_token": "act.mock_access_token_123",
+          "expires_in": 86400,
+          "open_id": "tiktok_open_id_abc",
+          "refresh_expires_in": 31536000,
+          "refresh_token": "rft.mock_refresh_token_456",
+          "scope": "user.info.basic,user.info.stats,video.list",
+          "token_type": "Bearer"
+        }
+      },
+      {
+        "status": 200,
+        "body": {
+          "data": {
+            "user": {
+              "open_id": "tiktok_open_id_abc",
+              "display_name": "Creator TikTok"
+            }
+          },
+          "error": { "code": "ok", "message": "", "log_id": "log_123" }
+        }
+      }
+    ],
+    "errors": {
+      "upstream": [
+        {
+          "status": 400,
+          "body": {
+            "error": "invalid_grant",
+            "error_description": "Authorization code has been used.",
+            "log_id": "contract-log-id"
+          }
+        }
+      ]
+    }
+  },
+
+  "refresh": {
+    "success": [
+      {
+        "status": 200,
+        "body": {
+          "access_token": "act.refreshed_access_token",
+          "expires_in": 86400,
+          "refresh_expires_in": 31536000,
+          "refresh_token": "rft.new_rotated_refresh_token",
+          "scope": "user.info.basic,user.info.stats,video.list",
+          "token_type": "Bearer"
+        }
+      }
+    ],
+    "errors": {
+      "revoked": [
+        {
+          "status": 400,
+          "body": {
+            "error": "invalid_grant",
+            "error_description": "Refresh token expired or revoked"
+          }
+        }
+      ],
+      "upstream": [
+        {
+          "status": 500,
+          "body": {
+            "error": "server_error",
+            "error_description": "Internal error",
+            "log_id": "contract-log-id"
+          }
+        }
+      ]
+    }
+  },
+
+  "fetchProfile": {
+    "success": [
+      {
+        "status": 200,
+        "body": {
+          "data": {
+            "user": {
+              "open_id": "open_id_xyz",
+              "union_id": "union_id_123",
+              "display_name": "Super Creator",
+              "avatar_url": "https://p16-sign.tiktokcdn-us.com/avatar.jpg",
+              "follower_count": 15420,
+              "following_count": 310,
+              "likes_count": 245000,
+              "video_count": 88
+            }
+          },
+          "error": { "code": "ok", "message": "", "log_id": "log_123" }
+        }
+      }
+    ],
+    "errors": {
+      "unauthorized": [
+        { "status": 401, "body": { "message": "Unauthorized", "code": 401 } }
+      ],
+      "unauthorizedBody": [
+        {
+          "status": 200,
+          "body": {
+            "data": {},
+            "error": {
+              "code": "access_token_invalid",
+              "message": "The access token is invalid or has expired",
+              "log_id": "contract-log-id"
+            }
+          }
+        }
+      ],
+      "rateLimited": [
+        { "status": 429, "body": { "message": "Too Many Requests", "code": 429 } }
+      ],
+      "rateLimitedBody": [
+        {
+          "status": 200,
+          "body": {
+            "data": {},
+            "error": {
+              "code": "rate_limit_exceeded",
+              "message": "Request rate limit exceeded, please retry later",
+              "log_id": "contract-log-id"
+            }
+          }
+        }
+      ],
+      "notFound": [
+        {
+          "status": 200,
+          "body": { "data": {}, "error": { "code": "ok", "message": "", "log_id": "contract-log-id" } }
+        }
+      ],
+      "upstream": [
+        { "status": 500, "body": { "message": "Internal Server Error", "code": 500 } }
+      ]
+    }
+  }
+}

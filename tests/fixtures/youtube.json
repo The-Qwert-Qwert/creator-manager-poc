@@ -1,0 +1,191 @@
+{
+  "exchangeCode": {
+    "success": [
+      {
+        "status": 200,
+        "body": {
+          "access_token": "ya29.mock_access_token",
+          "expires_in": 3600,
+          "token_type": "Bearer",
+          "scope": "https://www.googleapis.com/auth/youtube.readonly",
+          "refresh_token": "1//mock_refresh_token"
+        }
+      },
+      {
+        "status": 200,
+        "body": {
+          "kind": "youtube#channelListResponse",
+          "etag": "contract-etag",
+          "pageInfo": { "totalResults": 1, "resultsPerPage": 5 },
+          "items": [
+            {
+              "kind": "youtube#channel",
+              "id": "UC_channel_123",
+              "snippet": {
+                "title": "Test Channel",
+                "customUrl": "@testchannel",
+                "publishedAt": "2020-01-01T00:00:00.000Z",
+                "thumbnails": {
+                  "high": { "url": "https://yt3.ggpht.com/high.jpg", "width": 800, "height": 800 }
+                }
+              },
+              "statistics": {
+                "viewCount": "1000",
+                "subscriberCount": "500",
+                "videoCount": "10",
+                "hiddenSubscriberCount": false
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "errors": {
+      "notFound": [
+        {
+          "status": 200,
+          "body": {
+            "access_token": "ya29.mock_access_token",
+            "expires_in": 3600,
+            "refresh_token": "1//mock_refresh_token"
+          }
+        },
+        {
+          "status": 200,
+          "body": {
+            "kind": "youtube#channelListResponse",
+            "pageInfo": { "totalResults": 0, "resultsPerPage": 5 },
+            "items": []
+          }
+        }
+      ],
+      "upstream": [
+        {
+          "status": 400,
+          "body": {
+            "error": "invalid_grant",
+            "error_description": "Bad Request"
+          }
+        }
+      ]
+    }
+  },
+
+  "refresh": {
+    "success": [
+      {
+        "status": 200,
+        "body": {
+          "access_token": "ya29.new_access_token",
+          "expires_in": 3600,
+          "token_type": "Bearer",
+          "scope": "https://www.googleapis.com/auth/youtube.readonly"
+        }
+      }
+    ],
+    "errors": {
+      "revoked": [
+        {
+          "status": 400,
+          "body": {
+            "error": "invalid_grant",
+            "error_description": "Token has been expired or revoked."
+          }
+        }
+      ],
+      "upstream": [
+        {
+          "status": 500,
+          "body": {
+            "error": "server_error",
+            "error_description": "Internal error"
+          }
+        }
+      ]
+    }
+  },
+
+  "fetchProfile": {
+    "success": [
+      {
+        "status": 200,
+        "body": {
+          "kind": "youtube#channelListResponse",
+          "pageInfo": { "totalResults": 1, "resultsPerPage": 5 },
+          "items": [
+            {
+              "kind": "youtube#channel",
+              "id": "UC_channel_123",
+              "snippet": {
+                "title": "Creative Tech",
+                "customUrl": "@creativetech",
+                "thumbnails": {
+                  "default": { "url": "https://yt3.ggpht.com/default.jpg", "width": 88, "height": 88 },
+                  "medium": { "url": "https://yt3.ggpht.com/medium.jpg", "width": 240, "height": 240 },
+                  "high": { "url": "https://yt3.ggpht.com/high.jpg", "width": 800, "height": 800 }
+                }
+              },
+              "statistics": {
+                "viewCount": "156320",
+                "subscriberCount": "873",
+                "hiddenSubscriberCount": false,
+                "videoCount": "13"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "errors": {
+      "unauthorized": [
+        {
+          "status": 401,
+          "body": {
+            "error": {
+              "code": 401,
+              "message": "Request had invalid credentials.",
+              "errors": [{ "message": "Invalid Credentials", "domain": "global", "reason": "authError" }],
+              "status": "UNAUTHENTICATED"
+            }
+          }
+        }
+      ],
+      "rateLimited": [
+        {
+          "status": 403,
+          "body": {
+            "error": {
+              "code": 403,
+              "message": "Quota exceeded",
+              "errors": [
+                { "message": "Quota exceeded", "domain": "youtube.quota", "reason": "quotaExceeded" }
+              ]
+            }
+          }
+        }
+      ],
+      "rateLimitedHttp": [
+        {
+          "status": 429,
+          "body": { "error": { "code": 429, "message": "Too Many Requests" } }
+        }
+      ],
+      "notFound": [
+        {
+          "status": 200,
+          "body": {
+            "kind": "youtube#channelListResponse",
+            "pageInfo": { "totalResults": 0, "resultsPerPage": 5 },
+            "items": []
+          }
+        }
+      ],
+      "upstream": [
+        {
+          "status": 500,
+          "body": { "error": { "code": 500, "message": "Internal Server Error" } }
+        }
+      ]
+    }
+  }
+}
