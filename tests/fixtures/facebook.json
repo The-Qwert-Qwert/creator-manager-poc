@@ -1,0 +1,160 @@
+{
+  "exchangeCode": {
+    "success": [
+      {
+        "status": 200,
+        "body": { "access_token": "short_lived_user_token_123", "token_type": "bearer" }
+      },
+      {
+        "status": 200,
+        "body": {
+          "access_token": "long_lived_user_token_456",
+          "token_type": "bearer",
+          "expires_in": 5183944
+        }
+      },
+      {
+        "status": 200,
+        "body": {
+          "data": [
+            {
+              "id": "page_12345",
+              "name": "Awesome Creator Page",
+              "access_token": "permanent_page_access_token_789",
+              "picture": {
+                "data": {
+                  "url": "https://lookaside.fbsbx.com/picture.jpg",
+                  "is_silhouette": false
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "errors": {
+      "notFound": [
+        {
+          "status": 200,
+          "body": { "access_token": "short_token" }
+        },
+        {
+          "status": 200,
+          "body": { "access_token": "long_token" }
+        },
+        {
+          "status": 200,
+          "body": { "data": [] }
+        }
+      ],
+      "upstream": [
+        {
+          "status": 400,
+          "body": {
+            "error": {
+              "message": "Invalid verification code format.",
+              "type": "OAuthException",
+              "code": 100,
+              "fbtrace_id": "contract-trace"
+            }
+          }
+        }
+      ]
+    }
+  },
+
+  "refresh": {
+    "success": [],
+    "errors": {
+      "revoked": []
+    }
+  },
+
+  "fetchProfile": {
+    "success": [
+      {
+        "status": 200,
+        "body": {
+          "id": "page_12345",
+          "name": "Creator's FB Page",
+          "followers_count": 8500,
+          "fan_count": 8200,
+          "picture": {
+            "data": {
+              "url": "https://lookaside.fbsbx.com/page-avatar.jpg",
+              "is_silhouette": false
+            }
+          }
+        }
+      }
+    ],
+    "errors": {
+      "revoked": [
+        {
+          "status": 400,
+          "body": {
+            "error": {
+              "message": "Error validating access token: Session has expired.",
+              "type": "OAuthException",
+              "code": 190,
+              "error_subcode": 463,
+              "fbtrace_id": "contract-trace"
+            }
+          }
+        }
+      ],
+      "rateLimited": [
+        {
+          "status": 429,
+          "body": {
+            "error": {
+              "message": "Too Many Requests",
+              "type": "OAuthException",
+              "code": 4,
+              "fbtrace_id": "contract-trace"
+            }
+          }
+        }
+      ],
+      "unauthorized": [
+        {
+          "status": 401,
+          "body": {
+            "error": {
+              "message": "Unauthorized token",
+              "type": "OAuthException",
+              "code": 401,
+              "fbtrace_id": "contract-trace"
+            }
+          }
+        }
+      ],
+      "notFound": [
+        {
+          "status": 404,
+          "body": {
+            "error": {
+              "message": "Not Found",
+              "type": "GraphMethodException",
+              "code": 100,
+              "fbtrace_id": "contract-trace"
+            }
+          }
+        }
+      ],
+      "upstream": [
+        {
+          "status": 500,
+          "body": {
+            "error": {
+              "message": "Internal Server Error",
+              "type": "GraphMethodException",
+              "code": 1,
+              "fbtrace_id": "contract-trace"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TikTokAdapter, tiktokAdapter } from "@/lib/adapters/tiktok";
 import { AdapterError, type ConnectedAccount } from "@/lib/adapters/types";
+import { errorRecording, recordedBody, tiktokRecording } from "./fixtures";
 
 describe("TikTokAdapter", () => {
   const originalFetch = global.fetch;
@@ -47,29 +48,7 @@ describe("TikTokAdapter", () => {
 
   describe("exchangeCode", () => {
     it("exchanges authorization code for tokens and user profile info", async () => {
-      const mockTokenResponse = {
-        access_token: "act.mock_access_token_123",
-        expires_in: 86400,
-        open_id: "tiktok_open_id_abc",
-        refresh_expires_in: 31536000,
-        refresh_token: "rft.mock_refresh_token_456",
-        scope: "user.info.basic,user.info.stats,video.list",
-        token_type: "Bearer",
-      };
-
-      const mockUserInfoResponse = {
-        data: {
-          user: {
-            open_id: "tiktok_open_id_abc",
-            display_name: "Creator TikTok",
-          },
-        },
-        error: {
-          code: "ok",
-          message: "",
-          log_id: "log_123",
-        },
-      };
+      const exchangeResponses = tiktokRecording.exchangeCode.success;
 
       const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
         if (url === "https://open.tiktokapis.com/v2/oauth/token/") {
@@ -87,7 +66,7 @@ describe("TikTokAdapter", () => {
           );
 
           return Promise.resolve(
-            new Response(JSON.stringify(mockTokenResponse), {
+            new Response(JSON.stringify(recordedBody(exchangeResponses, 0)), {
               status: 200,
               headers: { "Content-Type": "application/json" },
             })
@@ -102,7 +81,7 @@ describe("TikTokAdapter", () => {
           ]).toBe("Bearer act.mock_access_token_123");
 
           return Promise.resolve(
-            new Response(JSON.stringify(mockUserInfoResponse), {
+            new Response(JSON.stringify(recordedBody(exchangeResponses, 1)), {
               status: 200,
               headers: { "Content-Type": "application/json" },
             })
@@ -163,18 +142,15 @@ describe("TikTokAdapter", () => {
     });
 
     it("throws AdapterError UPSTREAM_ERROR when token endpoint returns error payload", async () => {
-      const mockErrorResponse = {
-        error: "invalid_grant",
-        error_description: "Authorization code has been used.",
-        log_id: "log_fail_123",
-      };
-
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response(JSON.stringify(mockErrorResponse), {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "exchangeCode", "upstream"), 0)),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
         )
       );
 
@@ -259,15 +235,6 @@ describe("TikTokAdapter", () => {
     });
 
     it("refreshes tokens and updates rotated refresh_token and expiresAt", async () => {
-      const mockRefreshResponse = {
-        access_token: "act.refreshed_access_token",
-        expires_in: 86400,
-        refresh_expires_in: 31536000,
-        refresh_token: "rft.new_rotated_refresh_token",
-        scope: "user.info.basic,user.info.stats,video.list",
-        token_type: "Bearer",
-      };
-
       const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
         expect(url).toBe("https://open.tiktokapis.com/v2/oauth/token/");
         expect(init?.method).toBe("POST");
@@ -278,7 +245,7 @@ describe("TikTokAdapter", () => {
         expect(bodyParams.get("client_secret")).toBe("test-tiktok-client-secret");
 
         return Promise.resolve(
-          new Response(JSON.stringify(mockRefreshResponse), {
+          new Response(JSON.stringify(recordedBody(tiktokRecording.refresh.success, 0)), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           })
@@ -324,17 +291,15 @@ describe("TikTokAdapter", () => {
     });
 
     it("throws AdapterError REVOKED when token endpoint returns invalid_grant", async () => {
-      const mockErrorResponse = {
-        error: "invalid_grant",
-        error_description: "Refresh token expired or revoked",
-      };
-
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response(JSON.stringify(mockErrorResponse), {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "refresh", "revoked"), 0)),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
         )
       );
 
@@ -356,10 +321,13 @@ describe("TikTokAdapter", () => {
     it("throws AdapterError UPSTREAM_ERROR on 500 error response", async () => {
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response("Internal Server Error", {
-            status: 500,
-            statusText: "Server Error",
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "refresh", "upstream"), 0)),
+            {
+              status: 500,
+              statusText: "Server Error",
+            }
+          )
         )
       );
 
@@ -414,25 +382,6 @@ describe("TikTokAdapter", () => {
     };
 
     it("fetches and returns a complete ProfileSnapshot with numeric counts", async () => {
-      const mockUserInfoResponse = {
-        data: {
-          user: {
-            open_id: "open_id_xyz",
-            union_id: "union_id_123",
-            display_name: "Super Creator",
-            avatar_url: "https://p16-sign.tiktokcdn-us.com/avatar.jpg",
-            follower_count: 15420,
-            following_count: 310,
-            likes_count: 245000,
-            video_count: 88,
-          },
-        },
-        error: {
-          code: "ok",
-          message: "",
-        },
-      };
-
       const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
         expect(url).toBe(
           "https://open.tiktokapis.com/v2/user/info/?fields=open_id%2Cunion_id%2Cavatar_url%2Cdisplay_name%2Cfollower_count%2Cfollowing_count%2Clikes_count%2Cvideo_count"
@@ -442,10 +391,13 @@ describe("TikTokAdapter", () => {
         ]).toBe("Bearer act.valid_access_token");
 
         return Promise.resolve(
-          new Response(JSON.stringify(mockUserInfoResponse), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
+          new Response(
+            JSON.stringify(recordedBody(tiktokRecording.fetchProfile.success, 0)),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
         );
       });
 
@@ -495,10 +447,13 @@ describe("TikTokAdapter", () => {
     it("throws AdapterError UNAUTHORIZED on 401 HTTP response", async () => {
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response("Unauthorized", {
-            status: 401,
-            statusText: "Unauthorized",
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "fetchProfile", "unauthorized"), 0)),
+            {
+              status: 401,
+              statusText: "Unauthorized",
+            }
+          )
         )
       );
 
@@ -515,20 +470,15 @@ describe("TikTokAdapter", () => {
     });
 
     it("throws AdapterError UNAUTHORIZED when error code is access_token_invalid", async () => {
-      const mockErrorResponse = {
-        data: {},
-        error: {
-          code: "access_token_invalid",
-          message: "The access token is invalid or has expired",
-        },
-      };
-
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response(JSON.stringify(mockErrorResponse), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "fetchProfile", "unauthorizedBody"), 0)),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
         )
       );
 
@@ -547,10 +497,13 @@ describe("TikTokAdapter", () => {
     it("throws AdapterError RATE_LIMITED on 429 HTTP response", async () => {
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response("Too Many Requests", {
-            status: 429,
-            statusText: "Too Many Requests",
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "fetchProfile", "rateLimited"), 0)),
+            {
+              status: 429,
+              statusText: "Too Many Requests",
+            }
+          )
         )
       );
 
@@ -567,20 +520,15 @@ describe("TikTokAdapter", () => {
     });
 
     it("throws AdapterError RATE_LIMITED when error code is rate_limit_exceeded", async () => {
-      const mockErrorResponse = {
-        data: {},
-        error: {
-          code: "rate_limit_exceeded",
-          message: "Request rate limit exceeded, please retry later",
-        },
-      };
-
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response(JSON.stringify(mockErrorResponse), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "fetchProfile", "rateLimitedBody"), 0)),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
         )
       );
 
@@ -596,14 +544,12 @@ describe("TikTokAdapter", () => {
     });
 
     it("throws AdapterError NOT_FOUND when user object is missing", async () => {
-      const mockEmptyResponse = {
-        data: {},
-        error: { code: "ok" },
-      };
-
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response(JSON.stringify(mockEmptyResponse), { status: 200 })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "fetchProfile", "notFound"), 0)),
+            { status: 200 }
+          )
         )
       );
 
@@ -649,10 +595,13 @@ describe("TikTokAdapter", () => {
     it("throws AdapterError UPSTREAM_ERROR on HTTP 500 error", async () => {
       global.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response("Internal Server Error", {
-            status: 500,
-            statusText: "Internal Server Error",
-          })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(tiktokRecording, "fetchProfile", "upstream"), 0)),
+            {
+              status: 500,
+              statusText: "Internal Server Error",
+            }
+          )
         )
       );
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { YouTubeAdapter, youtubeAdapter } from "@/lib/adapters/youtube";
 import { AdapterError, type ConnectedAccount } from "@/lib/adapters/types";
+import { errorRecording, recordedBody, youtubeRecording } from "./fixtures";
 
 describe("YouTubeAdapter", () => {
   const originalFetch = global.fetch;
@@ -49,51 +50,21 @@ describe("YouTubeAdapter", () => {
 
   describe("exchangeCode", () => {
     it("exchanges authorization code for tokens and channel info", async () => {
-      const mockTokenResponse = {
-        access_token: "ya29.mock_access_token",
-        expires_in: 3600,
-        token_type: "Bearer",
-        scope: "https://www.googleapis.com/auth/youtube.readonly",
-        refresh_token: "1//mock_refresh_token",
-      };
-
-      const mockChannelResponse = {
-        kind: "youtube#channelListResponse",
-        items: [
-          {
-            id: "UC_channel_123",
-            snippet: {
-              title: "Test Channel",
-              customUrl: "@testchannel",
-              thumbnails: {
-                high: { url: "https://yt3.ggpht.com/high.jpg" },
-              },
-            },
-            statistics: {
-              viewCount: "1000",
-              subscriberCount: "500",
-              videoCount: "10",
-              hiddenSubscriberCount: false,
-            },
-          },
-        ],
-      };
-
       const fetchMock = vi.fn().mockImplementation((url: string) => {
         if (url === "https://oauth2.googleapis.com/token") {
           return Promise.resolve(
-            new Response(JSON.stringify(mockTokenResponse), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            })
+            new Response(
+              JSON.stringify(recordedBody(youtubeRecording.exchangeCode.success, 0)),
+              { status: 200, headers: { "Content-Type": "application/json" } }
+            )
           );
         }
         if (url.startsWith("https://www.googleapis.com/youtube/v3/channels")) {
           return Promise.resolve(
-            new Response(JSON.stringify(mockChannelResponse), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            })
+            new Response(
+              JSON.stringify(recordedBody(youtubeRecording.exchangeCode.success, 1)),
+              { status: 200, headers: { "Content-Type": "application/json" } }
+            )
           );
         }
         return Promise.reject(new Error(`Unhandled URL: ${url}`));
@@ -200,20 +171,16 @@ describe("YouTubeAdapter", () => {
     });
 
     it("throws AdapterError NOT_FOUND when no YouTube channel is found for the account", async () => {
+      const notFound = errorRecording(youtubeRecording, "exchangeCode", "notFound");
+
       global.fetch = vi.fn().mockImplementation((url: string) => {
         if (url === "https://oauth2.googleapis.com/token") {
           return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                access_token: "ya29.token",
-                expires_in: 3600,
-              }),
-              { status: 200 }
-            )
+            new Response(JSON.stringify(recordedBody(notFound, 0)), { status: 200 })
           );
         }
         return Promise.resolve(
-          new Response(JSON.stringify({ items: [] }), { status: 200 })
+          new Response(JSON.stringify(recordedBody(notFound, 1)), { status: 200 })
         );
       });
 
@@ -247,17 +214,11 @@ describe("YouTubeAdapter", () => {
     });
 
     it("refreshes access token and preserves existing refreshToken if not returned", async () => {
-      const mockTokenResponse = {
-        access_token: "ya29.new_access_token",
-        expires_in: 3600,
-        token_type: "Bearer",
-      };
-
       const fetchMock = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify(mockTokenResponse), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
+        new Response(
+          JSON.stringify(recordedBody(youtubeRecording.refresh.success, 0)),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
       );
       global.fetch = fetchMock;
 
@@ -306,10 +267,7 @@ describe("YouTubeAdapter", () => {
     it("throws AdapterError REVOKED when Google returns invalid_grant", async () => {
       global.fetch = vi.fn().mockResolvedValue(
         new Response(
-          JSON.stringify({
-            error: "invalid_grant",
-            error_description: "Token has been expired or revoked.",
-          }),
+          JSON.stringify(recordedBody(errorRecording(youtubeRecording, "refresh", "revoked"), 0)),
           { status: 400 }
         )
       );
@@ -334,10 +292,7 @@ describe("YouTubeAdapter", () => {
     it("throws AdapterError UPSTREAM_ERROR when refresh fails with another error", async () => {
       global.fetch = vi.fn().mockResolvedValue(
         new Response(
-          JSON.stringify({
-            error: "server_error",
-            error_description: "Internal error",
-          }),
+          JSON.stringify(recordedBody(errorRecording(youtubeRecording, "refresh", "upstream"), 0)),
           { status: 500, statusText: "Internal Server Error" }
         )
       );
@@ -369,35 +324,11 @@ describe("YouTubeAdapter", () => {
     };
 
     it("fetches and parses channel profile snapshot successfully", async () => {
-      const mockChannelResponse = {
-        kind: "youtube#channelListResponse",
-        items: [
-          {
-            id: "UC_channel_123",
-            snippet: {
-              title: "Creative Tech",
-              customUrl: "@creativetech",
-              thumbnails: {
-                default: { url: "https://yt3.ggpht.com/default.jpg" },
-                medium: { url: "https://yt3.ggpht.com/medium.jpg" },
-                high: { url: "https://yt3.ggpht.com/high.jpg" },
-              },
-            },
-            statistics: {
-              viewCount: "156320",
-              subscriberCount: "873",
-              hiddenSubscriberCount: false,
-              videoCount: "13",
-            },
-          },
-        ],
-      };
-
       const fetchMock = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify(mockChannelResponse), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
+        new Response(
+          JSON.stringify(recordedBody(youtubeRecording.fetchProfile.success, 0)),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
       );
       global.fetch = fetchMock;
 
@@ -486,9 +417,7 @@ describe("YouTubeAdapter", () => {
     it("throws AdapterError UNAUTHORIZED on 401 response", async () => {
       global.fetch = vi.fn().mockResolvedValue(
         new Response(
-          JSON.stringify({
-            error: { code: 401, message: "Request had invalid credentials." },
-          }),
+          JSON.stringify(recordedBody(errorRecording(youtubeRecording, "fetchProfile", "unauthorized"), 0)),
           { status: 401, statusText: "Unauthorized" }
         )
       );
@@ -508,13 +437,7 @@ describe("YouTubeAdapter", () => {
     it("throws AdapterError RATE_LIMITED on 403 quotaExceeded response", async () => {
       global.fetch = vi.fn().mockResolvedValue(
         new Response(
-          JSON.stringify({
-            error: {
-              code: 403,
-              message: "Quota exceeded",
-              errors: [{ reason: "quotaExceeded", message: "Quota exceeded" }],
-            },
-          }),
+          JSON.stringify(recordedBody(errorRecording(youtubeRecording, "fetchProfile", "rateLimited"), 0)),
           { status: 403, statusText: "Forbidden" }
         )
       );
@@ -533,10 +456,10 @@ describe("YouTubeAdapter", () => {
 
     it("throws AdapterError RATE_LIMITED on 429 response", async () => {
       global.fetch = vi.fn().mockResolvedValue(
-        new Response("Too Many Requests", {
-          status: 429,
-          statusText: "Too Many Requests",
-        })
+        new Response(
+          JSON.stringify(recordedBody(errorRecording(youtubeRecording, "fetchProfile", "rateLimitedHttp"), 0)),
+          { status: 429, statusText: "Too Many Requests" }
+        )
       );
 
       try {
@@ -553,10 +476,10 @@ describe("YouTubeAdapter", () => {
 
     it("throws AdapterError UPSTREAM_ERROR when API returns non-ok response", async () => {
       global.fetch = vi.fn().mockResolvedValue(
-        new Response("Server Error", {
-          status: 500,
-          statusText: "Internal Server Error",
-        })
+        new Response(
+          JSON.stringify(recordedBody(errorRecording(youtubeRecording, "fetchProfile", "upstream"), 0)),
+          { status: 500, statusText: "Internal Server Error" }
+        )
       );
 
       try {
@@ -575,7 +498,10 @@ describe("YouTubeAdapter", () => {
       global.fetch = vi
         .fn()
         .mockResolvedValue(
-          new Response(JSON.stringify({ items: [] }), { status: 200 })
+          new Response(
+            JSON.stringify(recordedBody(errorRecording(youtubeRecording, "fetchProfile", "notFound"), 0)),
+            { status: 200 }
+          )
         );
 
       try {

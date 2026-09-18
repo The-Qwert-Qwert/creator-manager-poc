@@ -4,6 +4,7 @@ import {
   instagramAdapter,
 } from "@/lib/adapters/instagram";
 import { AdapterError, type ConnectedAccount } from "@/lib/adapters/types";
+import { errorRecording, instagramRecording, recordedBody } from "./fixtures";
 
 describe("InstagramAdapter", () => {
   const originalFetch = global.fetch;
@@ -49,40 +50,24 @@ describe("InstagramAdapter", () => {
 
   describe("exchangeCode", () => {
     it("strips trailing #_ and completes short -> long -> profile exchange", async () => {
-      const mockShortResponse = {
-        access_token: "short-token-123",
-        user_id: 17841405793187218,
-      };
-
-      const mockLongResponse = {
-        access_token: "long-token-456",
-        token_type: "bearer",
-        expires_in: 5184000,
-      };
-
-      const mockProfileResponse = {
-        id: "17841405793187218",
-        username: "testcreator",
-        followers_count: 12500,
-        profile_picture_url: "https://scontent.cdninstagram.com/avatar.jpg",
-      };
+      const exchangeResponses = instagramRecording.exchangeCode.success;
 
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockShortResponse,
+          json: async () => recordedBody(exchangeResponses, 0),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockLongResponse,
+          json: async () => recordedBody(exchangeResponses, 1),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockProfileResponse,
+          json: async () => recordedBody(exchangeResponses, 2),
         });
 
       global.fetch = fetchMock;
@@ -153,11 +138,8 @@ describe("InstagramAdapter", () => {
         ok: false,
         status: 400,
         statusText: "Bad Request",
-        json: async () => ({
-          error_type: "OAuthException",
-          code: 400,
-          error_message: "Invalid authorization code",
-        }),
+        json: async () =>
+          recordedBody(errorRecording(instagramRecording, "exchangeCode", "upstream"), 0),
       });
 
       try {
@@ -230,16 +212,10 @@ describe("InstagramAdapter", () => {
     });
 
     it("successfully refreshes a long-lived access token", async () => {
-      const mockRefreshResponse = {
-        access_token: "refreshed-long-token-789",
-        token_type: "bearer",
-        expires_in: 5184000,
-      };
-
       const fetchMock = vi.fn().mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockRefreshResponse,
+        json: async () => recordedBody(instagramRecording.refresh.success, 0),
       });
       global.fetch = fetchMock;
 
@@ -295,14 +271,7 @@ describe("InstagramAdapter", () => {
         ok: false,
         status: 400,
         statusText: "Bad Request",
-        json: async () => ({
-          error: {
-            message: "Error validating access token: Session expired",
-            type: "OAuthException",
-            code: 190,
-            error_subcode: 463,
-          },
-        }),
+        json: async () => recordedBody(errorRecording(instagramRecording, "refresh", "revoked"), 0),
       });
 
       try {
@@ -345,14 +314,7 @@ describe("InstagramAdapter", () => {
         ok: false,
         status: 400,
         statusText: "Bad Request",
-        json: async () => ({
-          error: {
-            message:
-              "Access token cannot be refreshed because it was created less than 24 hours ago",
-            type: "OAuthException",
-            code: 190,
-          },
-        }),
+        json: async () => recordedBody(errorRecording(instagramRecording, "refresh", "upstream"), 0),
       });
 
       try {
@@ -377,17 +339,10 @@ describe("InstagramAdapter", () => {
     };
 
     it("returns ProfileSnapshot with mapped fields and extras", async () => {
-      const mockProfileResponse = {
-        id: "17841405793187218",
-        username: "my_brand",
-        followers_count: 54321,
-        profile_picture_url: "https://scontent.cdninstagram.com/pic.jpg",
-      };
-
       const fetchMock = vi.fn().mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockProfileResponse,
+        json: async () => recordedBody(instagramRecording.fetchProfile.success, 0),
       });
       global.fetch = fetchMock;
 
@@ -436,6 +391,8 @@ describe("InstagramAdapter", () => {
         ok: false,
         status: 401,
         statusText: "Unauthorized",
+        json: async () =>
+          recordedBody(errorRecording(instagramRecording, "fetchProfile", "unauthorized"), 0),
       });
 
       try {
@@ -453,6 +410,8 @@ describe("InstagramAdapter", () => {
         ok: false,
         status: 429,
         statusText: "Too Many Requests",
+        json: async () =>
+          recordedBody(errorRecording(instagramRecording, "fetchProfile", "rateLimited"), 0),
       });
 
       try {
@@ -469,7 +428,8 @@ describe("InstagramAdapter", () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ id: "12345" }), // missing username
+        json: async () =>
+          recordedBody(errorRecording(instagramRecording, "fetchProfile", "notFound"), 0), // missing username
       });
 
       try {
@@ -487,9 +447,8 @@ describe("InstagramAdapter", () => {
         ok: false,
         status: 500,
         statusText: "Internal Server Error",
-        json: async () => ({
-          error: { message: "Internal Graph API error" },
-        }),
+        json: async () =>
+          recordedBody(errorRecording(instagramRecording, "fetchProfile", "upstream"), 0),
       });
 
       try {
