@@ -13,9 +13,12 @@ const IG_AUTH_ENDPOINT = "https://api.instagram.com/oauth/authorize";
 const IG_SHORT_TOKEN_ENDPOINT = "https://api.instagram.com/oauth/access_token";
 const IG_LONG_TOKEN_ENDPOINT = "https://graph.instagram.com/access_token";
 const IG_REFRESH_ENDPOINT = "https://graph.instagram.com/refresh_access_token";
-const IG_PROFILE_ENDPOINT = "https://graph.instagram.com/v21.0/me";
 const IG_SCOPE = "instagram_business_basic";
 const IG_PROFILE_FIELDS = "id,username,followers_count,profile_picture_url";
+
+function getIgProfileEndpoint(): string {
+  return `https://graph.instagram.com/${config.meta.graphVersion}/me`;
+}
 
 interface InstagramShortTokenResponse {
   access_token?: string;
@@ -67,7 +70,7 @@ interface InstagramErrorPayload {
 async function fetchInstagramProfile(
   accessToken: string
 ): Promise<InstagramProfileResponse> {
-  const url = new URL(IG_PROFILE_ENDPOINT);
+  const url = new URL(getIgProfileEndpoint());
   url.searchParams.set("fields", IG_PROFILE_FIELDS);
 
   const res = await fetch(url.toString(), {
@@ -147,8 +150,8 @@ export class InstagramAdapter implements PlatformAdapter {
 
   authUrl(state: string): string {
     const url = new URL(IG_AUTH_ENDPOINT);
-    url.searchParams.set("client_id", config.instagram.clientId);
-    url.searchParams.set("redirect_uri", config.instagram.redirectUri);
+    url.searchParams.set("client_id", config.meta.ig.clientId);
+    url.searchParams.set("redirect_uri", config.meta.ig.redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", IG_SCOPE);
     url.searchParams.set("state", state);
@@ -161,10 +164,10 @@ export class InstagramAdapter implements PlatformAdapter {
 
     // 2. Short-lived token exchange
     const body = new URLSearchParams({
-      client_id: config.instagram.clientId,
-      client_secret: config.instagram.clientSecret,
+      client_id: config.meta.ig.clientId,
+      client_secret: config.meta.ig.clientSecret,
       grant_type: "authorization_code",
-      redirect_uri: config.instagram.redirectUri,
+      redirect_uri: config.meta.ig.redirectUri,
       code: cleanCode,
     });
 
@@ -204,7 +207,7 @@ export class InstagramAdapter implements PlatformAdapter {
     // 3. Exchange short-lived token for long-lived token
     const longUrl = new URL(IG_LONG_TOKEN_ENDPOINT);
     longUrl.searchParams.set("grant_type", "ig_exchange_token");
-    longUrl.searchParams.set("client_secret", config.instagram.clientSecret);
+    longUrl.searchParams.set("client_secret", config.meta.ig.clientSecret);
     longUrl.searchParams.set("access_token", shortToken);
 
     const longRes = await fetch(longUrl.toString());

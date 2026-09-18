@@ -45,15 +45,36 @@ export const config = {
     },
   },
 
-  instagram: {
-    get clientId(): string {
-      return requireEnv("INSTAGRAM_CLIENT_ID");
+  meta: {
+    get graphVersion(): string {
+      return requireEnv("META_GRAPH_VERSION");
     },
-    get clientSecret(): string {
-      return requireEnv("INSTAGRAM_CLIENT_SECRET");
+
+    ig: {
+      get clientId(): string {
+        return requireEnv("META_IG_CLIENT_ID");
+      },
+      get clientSecret(): string {
+        return requireEnv("META_IG_CLIENT_SECRET");
+      },
+      get redirectUri(): string {
+        return requireEnv("META_IG_REDIRECT_URI");
+      },
     },
-    get redirectUri(): string {
-      return requireEnv("INSTAGRAM_REDIRECT_URI");
+
+    fb: {
+      get clientId(): string {
+        return requireEnv("META_FB_CLIENT_ID");
+      },
+      get clientSecret(): string {
+        return requireEnv("META_FB_CLIENT_SECRET");
+      },
+      get redirectUri(): string {
+        return requireEnv("META_FB_REDIRECT_URI");
+      },
+      get configId(): string | undefined {
+        return process.env.META_FB_CONFIG_ID || undefined;
+      },
     },
   },
 } as const;

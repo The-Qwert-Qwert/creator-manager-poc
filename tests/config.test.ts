@@ -109,41 +109,109 @@ describe("config", () => {
     });
   });
 
-  describe("instagram", () => {
-    it("returns clientId, clientSecret, and redirectUri when set", () => {
-      vi.stubEnv("INSTAGRAM_CLIENT_ID", "instagram-client-id");
-      vi.stubEnv("INSTAGRAM_CLIENT_SECRET", "instagram-client-secret");
-      vi.stubEnv(
-        "INSTAGRAM_REDIRECT_URI",
-        "https://app.example.com/api/auth/instagram/callback"
-      );
+  describe("meta", () => {
+    describe("graphVersion", () => {
+      it("returns graphVersion when set", () => {
+        vi.stubEnv("META_GRAPH_VERSION", "v21.0");
+        expect(config.meta.graphVersion).toBe("v21.0");
+      });
 
-      expect(config.instagram.clientId).toBe("instagram-client-id");
-      expect(config.instagram.clientSecret).toBe("instagram-client-secret");
-      expect(config.instagram.redirectUri).toBe(
-        "https://app.example.com/api/auth/instagram/callback"
-      );
+      it("throws when META_GRAPH_VERSION is missing", () => {
+        vi.stubEnv("META_GRAPH_VERSION", "");
+        expect(() => config.meta.graphVersion).toThrow(
+          "META_GRAPH_VERSION is not set"
+        );
+      });
     });
 
-    it("throws when INSTAGRAM_CLIENT_ID is missing", () => {
-      vi.stubEnv("INSTAGRAM_CLIENT_ID", "");
-      expect(() => config.instagram.clientId).toThrow(
-        "INSTAGRAM_CLIENT_ID is not set"
-      );
+    describe("ig", () => {
+      it("returns clientId, clientSecret, and redirectUri when set", () => {
+        vi.stubEnv("META_IG_CLIENT_ID", "instagram-client-id");
+        vi.stubEnv("META_IG_CLIENT_SECRET", "instagram-client-secret");
+        vi.stubEnv(
+          "META_IG_REDIRECT_URI",
+          "https://app.example.com/api/auth/instagram/callback"
+        );
+
+        expect(config.meta.ig.clientId).toBe("instagram-client-id");
+        expect(config.meta.ig.clientSecret).toBe("instagram-client-secret");
+        expect(config.meta.ig.redirectUri).toBe(
+          "https://app.example.com/api/auth/instagram/callback"
+        );
+      });
+
+      it("throws when META_IG_CLIENT_ID is missing", () => {
+        vi.stubEnv("META_IG_CLIENT_ID", "");
+        expect(() => config.meta.ig.clientId).toThrow(
+          "META_IG_CLIENT_ID is not set"
+        );
+      });
+
+      it("throws when META_IG_CLIENT_SECRET is missing", () => {
+        vi.stubEnv("META_IG_CLIENT_SECRET", "");
+        expect(() => config.meta.ig.clientSecret).toThrow(
+          "META_IG_CLIENT_SECRET is not set"
+        );
+      });
+
+      it("throws when META_IG_REDIRECT_URI is missing", () => {
+        vi.stubEnv("META_IG_REDIRECT_URI", "");
+        expect(() => config.meta.ig.redirectUri).toThrow(
+          "META_IG_REDIRECT_URI is not set"
+        );
+      });
     });
 
-    it("throws when INSTAGRAM_CLIENT_SECRET is missing", () => {
-      vi.stubEnv("INSTAGRAM_CLIENT_SECRET", "");
-      expect(() => config.instagram.clientSecret).toThrow(
-        "INSTAGRAM_CLIENT_SECRET is not set"
-      );
-    });
+    describe("fb", () => {
+      it("returns clientId, clientSecret, redirectUri, and configId when set", () => {
+        vi.stubEnv("META_FB_CLIENT_ID", "facebook-client-id");
+        vi.stubEnv("META_FB_CLIENT_SECRET", "facebook-client-secret");
+        vi.stubEnv(
+          "META_FB_REDIRECT_URI",
+          "https://app.example.com/api/auth/facebook/callback"
+        );
+        vi.stubEnv("META_FB_CONFIG_ID", "facebook-config-id");
 
-    it("throws when INSTAGRAM_REDIRECT_URI is missing", () => {
-      vi.stubEnv("INSTAGRAM_REDIRECT_URI", "");
-      expect(() => config.instagram.redirectUri).toThrow(
-        "INSTAGRAM_REDIRECT_URI is not set"
-      );
+        expect(config.meta.fb.clientId).toBe("facebook-client-id");
+        expect(config.meta.fb.clientSecret).toBe("facebook-client-secret");
+        expect(config.meta.fb.redirectUri).toBe(
+          "https://app.example.com/api/auth/facebook/callback"
+        );
+        expect(config.meta.fb.configId).toBe("facebook-config-id");
+      });
+
+      it("returns undefined for configId when META_FB_CONFIG_ID is not set", () => {
+        vi.stubEnv("META_FB_CLIENT_ID", "facebook-client-id");
+        vi.stubEnv("META_FB_CLIENT_SECRET", "facebook-client-secret");
+        vi.stubEnv(
+          "META_FB_REDIRECT_URI",
+          "https://app.example.com/api/auth/facebook/callback"
+        );
+        vi.stubEnv("META_FB_CONFIG_ID", "");
+
+        expect(config.meta.fb.configId).toBeUndefined();
+      });
+
+      it("throws when META_FB_CLIENT_ID is missing", () => {
+        vi.stubEnv("META_FB_CLIENT_ID", "");
+        expect(() => config.meta.fb.clientId).toThrow(
+          "META_FB_CLIENT_ID is not set"
+        );
+      });
+
+      it("throws when META_FB_CLIENT_SECRET is missing", () => {
+        vi.stubEnv("META_FB_CLIENT_SECRET", "");
+        expect(() => config.meta.fb.clientSecret).toThrow(
+          "META_FB_CLIENT_SECRET is not set"
+        );
+      });
+
+      it("throws when META_FB_REDIRECT_URI is missing", () => {
+        vi.stubEnv("META_FB_REDIRECT_URI", "");
+        expect(() => config.meta.fb.redirectUri).toThrow(
+          "META_FB_REDIRECT_URI is not set"
+        );
+      });
     });
   });
 });

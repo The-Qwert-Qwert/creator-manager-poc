@@ -9,12 +9,13 @@ describe("InstagramAdapter", () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
-    vi.stubEnv("INSTAGRAM_CLIENT_ID", "test-ig-client-id");
-    vi.stubEnv("INSTAGRAM_CLIENT_SECRET", "test-ig-client-secret");
+    vi.stubEnv("META_IG_CLIENT_ID", "test-ig-client-id");
+    vi.stubEnv("META_IG_CLIENT_SECRET", "test-ig-client-secret");
     vi.stubEnv(
-      "INSTAGRAM_REDIRECT_URI",
+      "META_IG_REDIRECT_URI",
       "http://localhost:3000/api/auth/instagram/callback"
     );
+    vi.stubEnv("META_GRAPH_VERSION", "v21.0");
   });
 
   afterEach(() => {
