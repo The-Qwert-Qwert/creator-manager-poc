@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { Platform } from "@/lib/adapters/types";
+import type { AccountStatus, Platform } from "@/lib/adapters/types";
 import {
   DELTA_NOTES,
   DELTA_PLACEHOLDER,
+  GATED_METRICS_THRESHOLD,
   SPARKLINE_POINTS,
   buildDashboardMetrics,
+  gatedMetricsNotice,
   type DashboardAccount,
   type SnapshotPoint,
 } from "@/lib/dashboard/metrics";
@@ -28,9 +30,9 @@ function account(
   id: string,
   platform: Platform,
   snapshots: readonly SnapshotPoint[],
-  handle = `@${id}`,
+  status: AccountStatus = "active",
 ): DashboardAccount {
-  return { id, platform, handle, snapshots };
+  return { id, platform, handle: `@${id}`, status, snapshots };
 }
 
 describe("buildDashboardMetrics", () => {
@@ -225,6 +227,7 @@ describe("buildDashboardMetrics", () => {
         platform: "youtube",
         handle: "@qwert",
         avatarUrl: "https://yt3.ggpht.com/yt-1.jpg",
+        status: "active",
         snapshots: series([100, 110]),
       },
     ]);
@@ -249,5 +252,51 @@ describe("buildDashboardMetrics", () => {
     expect(() =>
       buildDashboardMetrics([account("yt-1", "youtube", [snap("not-a-date", 10)])]),
     ).toThrow(/Invalid snapshot date: not-a-date/);
+  });
+
+  it("surfaces each account's connection status on its row", () => {
+    const metrics = buildDashboardMetrics([
+      account("yt-1", "youtube", series([100, 110]), "needs_reconnect"),
+      account("tt-1", "tiktok", series([10, 12]), "revoked"),
+      account("ig-1", "instagram", series([5, 6])),
+    ]);
+
+    expect(metrics.rows.map((row) => row.status)).toEqual([
+      "needs_reconnect",
+      "revoked",
+      "active",
+    ]);
+  });
+
+  it("notes the withheld insight metrics while an account sits under the gate", () => {
+    const metrics = buildDashboardMetrics([
+      account("ig-1", "instagram", [snap(day(0), GATED_METRICS_THRESHOLD - 1)]),
+      account("fb-1", "facebook", [snap(day(0), GATED_METRICS_THRESHOLD - 1)]),
+    ]);
+
+    expect(metrics.rows[0]?.gatedNotice).toBe(
+      `Reach and impressions aren't collected yet (and are hidden below ${GATED_METRICS_THRESHOLD} followers) — showing your audience count only.`,
+    );
+    expect(metrics.rows[1]?.gatedNotice).toBe(
+      `Page insights aren't collected yet (and are hidden below ${GATED_METRICS_THRESHOLD} Page likes) — showing your audience count only.`,
+    );
+    expect(metrics.rows[0]?.audienceCount).toBe(GATED_METRICS_THRESHOLD - 1);
+  });
+
+  it("drops the gate note once the account clears the threshold", () => {
+    expect(gatedMetricsNotice("instagram", GATED_METRICS_THRESHOLD)).toBeNull();
+    expect(gatedMetricsNotice("facebook", GATED_METRICS_THRESHOLD + 1)).toBeNull();
+  });
+
+  it("never claims a gate on platforms that do not withhold these metrics", () => {
+    expect(gatedMetricsNotice("youtube", 10)).toBeNull();
+    expect(gatedMetricsNotice("tiktok", 10)).toBeNull();
+  });
+
+  it("stays quiet about gating for an account with no snapshot yet", () => {
+    const metrics = buildDashboardMetrics([account("ig-1", "instagram", [])]);
+
+    expect(metrics.rows[0]?.gatedNotice).toBeNull();
+    expect(metrics.rows[0]?.audienceCount).toBeNull();
   });
 });

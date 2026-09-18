@@ -5,10 +5,17 @@
   --card: #ffffff;
   --card-foreground: #0f172a;
   --border: #e2e8f0;
-  --muted: #64748b;
+  --muted: #475569;
   --muted-background: #f1f5f9;
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
+  --primary-fill: #2563eb;
+  --success: #047857;
+  --success-soft: rgba(4, 120, 87, 0.12);
+  --warning: #92400e;
+  --warning-soft: rgba(180, 83, 9, 0.12);
+  --danger: #b91c1c;
+  --danger-soft: rgba(185, 28, 28, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,6 +29,13 @@
     --muted-background: #1e293b;
     --primary: #3b82f6;
     --primary-hover: #2563eb;
+    --primary-fill: #1d4ed8;
+    --success: #34d399;
+    --success-soft: rgba(52, 211, 153, 0.16);
+    --warning: #fbbf24;
+    --warning-soft: rgba(251, 191, 36, 0.16);
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.16);
   }
 }
 
