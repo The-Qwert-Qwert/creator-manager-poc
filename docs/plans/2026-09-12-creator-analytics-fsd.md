@@ -53,7 +53,7 @@ The product exists because creators currently open 2–4 native apps, each with 
 
 | ID | Requirement | Acceptance criteria |
 |----|-------------|---------------------|
-| FR-1 | User auth | Sign up/sign in with magic link or Google. Session cookie, server-side session validation. A protected route sends the user to sign-in, and after signing in returns them to the path they asked for. Post-auth destinations are same-origin relative paths only. A signed-in user who opens the sign-in page lands back on the dashboard, and the root path has no landing page — it sends the visitor to the dashboard. |
+| FR-1 | User auth | Sign up/sign in with magic link or Google. Session cookie, server-side session validation. A protected route sends the user to sign-in, and after signing in returns them to the path they asked for. Post-auth destinations are same-origin relative paths only. A signed-in user who opens the sign-in page is returned to the dashboard unless the link asked for a specific destination, and the root path has no landing page — it sends the visitor to the dashboard. |
 | FR-2 | Connect platform | Per-platform OAuth with CSRF `state`. Handles denial gracefully. Stores encrypted tokens + platform IDs. Idempotent re-connect updates existing row (no duplicates). |
 | FR-3 | Daily snapshot job | Runs once daily (cron). Per active account: 1–2 adapter calls → one `metric_snapshots` row. Idempotent (unique account+date upsert). Failures isolated per account; batch continues. |
 | FR-4 | Dashboard | Renders solely from our DB. Combined audience + 7-day delta + per-platform rows. Never calls platform APIs on page load. |

@@ -3,8 +3,7 @@ import { PLATFORMS, type Platform } from "@/lib/adapters/types";
 import { getAdapter, registerDefaultAdapters } from "@/lib/adapters/registry";
 import { generateState } from "@/lib/auth/state";
 import {
-  POST_AUTH_REDIRECT_COOKIE,
-  POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
+  postAuthRedirectCookie,
   safeRedirectPath,
 } from "@/lib/auth/redirect";
 import { config } from "@/lib/config";
@@ -37,13 +36,8 @@ export async function GET(
 
     // Record the destination so the connect flow resumes after sign-in.
     const redirectResponse = NextResponse.redirect(signInUrl);
-    redirectResponse.cookies.set(POST_AUTH_REDIRECT_COOKIE, destination, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
-    });
+    const { name, value, options } = postAuthRedirectCookie(destination);
+    redirectResponse.cookies.set(name, value, options);
 
     return redirectResponse;
   }

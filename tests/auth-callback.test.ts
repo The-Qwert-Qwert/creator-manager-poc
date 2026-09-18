@@ -106,6 +106,18 @@ describe("GET /auth/callback", () => {
     expect(state.exchangeCalls).toBe(0);
   });
 
+  it("reports an expired link as expired rather than as incomplete", async () => {
+    state.redirectCookie = "/dashboard";
+
+    const response = await GET(
+      new NextRequest(`${BASE}/auth/callback?error=access_denied&error_code=otp_expired`),
+    );
+
+    expect(response.status).toBe(307);
+    expect(locationOf(response).searchParams.get("error")).toBe("link_expired");
+    expect(state.exchangeCalls).toBe(0);
+  });
+
   it("redirects to sign-in with exchange_failed when the exchange errors", async () => {
     state.redirectCookie = "/dashboard";
     state.exchangeError = { message: "invalid_grant" };

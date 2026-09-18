@@ -11,6 +11,24 @@ export const POST_AUTH_REDIRECT_COOKIE = "post_auth_redirect";
 // so the destination is still there when the link is finally opened.
 export const POST_AUTH_REDIRECT_MAX_AGE_SECONDS = 3600;
 
+/**
+ * The one definition of the destination cookie, so the guard and the OAuth
+ * start route cannot drift. Pass the value straight through: Next encodes it.
+ */
+export function postAuthRedirectCookie(destination: string) {
+  return {
+    name: POST_AUTH_REDIRECT_COOKIE,
+    value: destination,
+    options: {
+      httpOnly: true,
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
+    },
+  };
+}
+
 export function safeRedirectPath(
   value: string | null | undefined,
   fallback: string = DEFAULT_SIGNED_IN_PATH,

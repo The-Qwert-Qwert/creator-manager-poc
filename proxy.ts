@@ -2,14 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   DEFAULT_SIGNED_IN_PATH,
-  POST_AUTH_REDIRECT_COOKIE,
-  POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
+  postAuthRedirectCookie,
   safeRedirectPath,
 } from "@/lib/auth/redirect";
 import { config as appConfig } from "@/lib/config";
 
 const PROTECTED = ["/dashboard"];
 const SIGNED_IN_ONLY = ["/auth/sign-in"];
+
+/** Exact segment match: "/dashboard" covers "/dashboard/x", not "/dashboardish". */
+function matchesPath(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
 
 /** A redirect is still a response — keep any session cookie refreshed above. */
 function carryingCookies(from: NextResponse, to: NextResponse): NextResponse {
@@ -51,12 +55,12 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  if (user && SIGNED_IN_ONLY.some((p) => pathname.startsWith(p))) {
+  if (user && SIGNED_IN_ONLY.some((base) => matchesPath(pathname, base))) {
     const destination = safeRedirectPath(searchParams.get("redirect"));
     return carryingCookies(response, NextResponse.redirect(new URL(destination, request.url)));
   }
 
-  if (!user && PROTECTED.some((p) => pathname.startsWith(p))) {
+  if (!user && PROTECTED.some((base) => matchesPath(pathname, base))) {
     const destination = safeRedirectPath(`${pathname}${request.nextUrl.search}`);
 
     const signInUrl = request.nextUrl.clone();
@@ -65,14 +69,8 @@ export async function proxy(request: NextRequest) {
     signInUrl.searchParams.set("redirect", destination);
 
     const redirectResponse = carryingCookies(response, NextResponse.redirect(signInUrl));
-
-    redirectResponse.cookies.set(POST_AUTH_REDIRECT_COOKIE, destination, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
-    });
+    const { name, value, options } = postAuthRedirectCookie(destination);
+    redirectResponse.cookies.set(name, value, options);
 
     return redirectResponse;
   }

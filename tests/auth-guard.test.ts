@@ -128,6 +128,15 @@ describe("proxy route guard", () => {
     expect(response.cookies.get(POST_AUTH_REDIRECT_COOKIE)).toBeUndefined();
   });
 
+  it("matches protected paths by whole segment, not by prefix", async () => {
+    const nearMiss = await proxy(requestFor("/dashboardish"));
+    const nested = await proxy(requestFor("/dashboard/settings"));
+
+    expect(nearMiss.status).toBe(200);
+    expect(nested.status).toBe(307);
+    expect(locationOf(nested).searchParams.get("redirect")).toBe("/dashboard/settings");
+  });
+
   it("keeps static assets and Next internals out of the matcher", () => {
     const matcher = new RegExp(`^${proxyConfig.matcher[0]!}$`);
 

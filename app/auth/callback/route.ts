@@ -6,6 +6,16 @@ import {
 } from "@/lib/auth/redirect";
 import { createClient } from "@/lib/supabase/server";
 
+function signInPath(reason: string, destination: string): string {
+  return `/auth/sign-in?error=${reason}&redirect=${encodeURIComponent(destination)}`;
+}
+
+/** Supabase reports an expired or already-used link as an error_code, not a code. */
+function failureReason(searchParams: URLSearchParams): string {
+  const reported = searchParams.get("error_code") ?? searchParams.get("error");
+  return reported === "otp_expired" ? "link_expired" : "missing_code";
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -17,10 +27,7 @@ export async function GET(request: NextRequest) {
 
   if (!code) {
     return NextResponse.redirect(
-      new URL(
-        `/auth/sign-in?error=missing_code&redirect=${encodeURIComponent(destination)}`,
-        origin,
-      ),
+      new URL(signInPath(failureReason(searchParams), destination), origin),
     );
   }
 
@@ -28,11 +35,9 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
+    // The cookie survives, so retrying still lands where the user was headed.
     return NextResponse.redirect(
-      new URL(
-        `/auth/sign-in?error=exchange_failed&redirect=${encodeURIComponent(destination)}`,
-        origin,
-      ),
+      new URL(signInPath("exchange_failed", destination), origin),
     );
   }
 
