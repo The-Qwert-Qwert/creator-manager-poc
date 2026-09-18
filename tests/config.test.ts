@@ -108,4 +108,43 @@ describe("config", () => {
       );
     });
   });
+
+  describe("instagram", () => {
+    it("returns clientId, clientSecret, and redirectUri when set", () => {
+      vi.stubEnv("INSTAGRAM_CLIENT_ID", "instagram-client-id");
+      vi.stubEnv("INSTAGRAM_CLIENT_SECRET", "instagram-client-secret");
+      vi.stubEnv(
+        "INSTAGRAM_REDIRECT_URI",
+        "https://app.example.com/api/auth/instagram/callback"
+      );
+
+      expect(config.instagram.clientId).toBe("instagram-client-id");
+      expect(config.instagram.clientSecret).toBe("instagram-client-secret");
+      expect(config.instagram.redirectUri).toBe(
+        "https://app.example.com/api/auth/instagram/callback"
+      );
+    });
+
+    it("throws when INSTAGRAM_CLIENT_ID is missing", () => {
+      vi.stubEnv("INSTAGRAM_CLIENT_ID", "");
+      expect(() => config.instagram.clientId).toThrow(
+        "INSTAGRAM_CLIENT_ID is not set"
+      );
+    });
+
+    it("throws when INSTAGRAM_CLIENT_SECRET is missing", () => {
+      vi.stubEnv("INSTAGRAM_CLIENT_SECRET", "");
+      expect(() => config.instagram.clientSecret).toThrow(
+        "INSTAGRAM_CLIENT_SECRET is not set"
+      );
+    });
+
+    it("throws when INSTAGRAM_REDIRECT_URI is missing", () => {
+      vi.stubEnv("INSTAGRAM_REDIRECT_URI", "");
+      expect(() => config.instagram.redirectUri).toThrow(
+        "INSTAGRAM_REDIRECT_URI is not set"
+      );
+    });
+  });
 });
+

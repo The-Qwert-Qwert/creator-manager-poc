@@ -44,4 +44,16 @@ export const config = {
       return requireEnv("GOOGLE_REDIRECT_URI");
     },
   },
+
+  instagram: {
+    get clientId(): string {
+      return requireEnv("INSTAGRAM_CLIENT_ID");
+    },
+    get clientSecret(): string {
+      return requireEnv("INSTAGRAM_CLIENT_SECRET");
+    },
+    get redirectUri(): string {
+      return requireEnv("INSTAGRAM_REDIRECT_URI");
+    },
+  },
 } as const;
