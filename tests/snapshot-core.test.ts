@@ -245,6 +245,33 @@ describe("runSnapshot", () => {
     expect(rows.has("a2|2026-09-18")).toBe(true);
   });
 
+  it("keeps going when the needs_reconnect write itself fails", async () => {
+    const { store, rows } = createFakeStore([account("a1", "instagram"), account("a2")]);
+    store.setStatus = async () => {
+      throw new Error("permission denied for table connected_accounts");
+    };
+
+    const { options, logs } = runOptions({
+      instagram: fakeAdapter("instagram", {
+        fetchProfile: async () => {
+          throw new AdapterError("instagram", "REVOKED", "session invalidated");
+        },
+      }),
+      youtube: fakeAdapter("youtube"),
+    });
+
+    const summary = await runSnapshot(store, { ...options, now: NOW });
+
+    // The recovery write failing must not abort the batch it is protecting.
+    expect(summary.failed).toBe(1);
+    expect(summary.needsReconnect).toBe(1);
+    expect(summary.processed).toBe(1);
+    expect(rows.has("a2|2026-09-18")).toBe(true);
+    expect(logs.map((entry) => entry.message)).toContain(
+      "[snapshot] could not mark account needs_reconnect",
+    );
+  });
+
   it("records a failure for a platform with no registered adapter", async () => {
     const { store, rows } = createFakeStore([account("a1", "facebook")]);
     const { options } = runOptions({});

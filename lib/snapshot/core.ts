@@ -138,6 +138,26 @@ async function fetchProfileWithRefresh(
 }
 
 /**
+ * The recovery path must never abort the batch it is trying to protect, so a
+ * failed status write is logged and swallowed rather than thrown.
+ */
+async function markNeedsReconnect(
+  store: SnapshotStore,
+  account: Pick<SnapshotAccount, "id" | "platform">,
+  log: SnapshotLog,
+): Promise<void> {
+  try {
+    await store.setStatus(account.id, "needs_reconnect");
+  } catch (error) {
+    log("error", "[snapshot] could not mark account needs_reconnect", {
+      accountId: account.id,
+      platform: account.platform,
+      message: errorMessage(error),
+    });
+  }
+}
+
+/**
  * FR-3: one snapshot per active account per UTC day. Each account is isolated —
  * a single bad account never stops the batch — and a rate limit defers the
  * remaining accounts to the next cycle instead of retrying into the wall.
@@ -175,7 +195,7 @@ export async function runSnapshot(
       const tokens = account.tokens;
 
       if (!tokens) {
-        await store.setStatus(account.id, "needs_reconnect");
+        await markNeedsReconnect(store, account, log);
         needsReconnect += 1;
         throw new Error("Stored tokens could not be decrypted");
       }
@@ -198,7 +218,7 @@ export async function runSnapshot(
       failures.push({ accountId: account.id, platform: account.platform, code, message });
 
       if (code === "REVOKED") {
-        await store.setStatus(account.id, "needs_reconnect");
+        await markNeedsReconnect(store, account, log);
         needsReconnect += 1;
       } else if (code === "RATE_LIMITED") {
         rateLimited = true;
