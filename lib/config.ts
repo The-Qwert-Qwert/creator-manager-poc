@@ -89,4 +89,13 @@ export const config = {
       return requireEnv("TIKTOK_REDIRECT_URI");
     },
   },
+
+  features: {
+    get enableMeta(): boolean {
+      if (process.env.ENABLE_META !== undefined) {
+        return process.env.ENABLE_META === "true";
+      }
+      return process.env.NODE_ENV === "development";
+    },
+  },
 } as const;
