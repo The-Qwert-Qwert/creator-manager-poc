@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  DEFAULT_SIGNED_IN_PATH,
   POST_AUTH_REDIRECT_COOKIE,
   POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
   safeRedirectPath,
@@ -41,6 +42,14 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname, searchParams } = request.nextUrl;
+
+  // No landing page: the root belongs to the app, not to a scaffold notice.
+  if (pathname === "/") {
+    return carryingCookies(
+      response,
+      NextResponse.redirect(new URL(DEFAULT_SIGNED_IN_PATH, request.url)),
+    );
+  }
 
   if (user && SIGNED_IN_ONLY.some((p) => pathname.startsWith(p))) {
     const destination = safeRedirectPath(searchParams.get("redirect"));

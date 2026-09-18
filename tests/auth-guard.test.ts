@@ -114,8 +114,15 @@ describe("proxy route guard", () => {
     expect(locationOf(response).pathname).toBe("/dashboard");
   });
 
-  it("does not touch unprotected routes", async () => {
+  it("sends the root to the dashboard instead of serving a landing page", async () => {
     const response = await proxy(requestFor("/"));
+
+    expect(response.status).toBe(307);
+    expect(locationOf(response).pathname).toBe("/dashboard");
+  });
+
+  it("leaves other unprotected routes alone", async () => {
+    const response = await proxy(requestFor("/auth/callback"));
 
     expect(response.status).toBe(200);
     expect(response.cookies.get(POST_AUTH_REDIRECT_COOKIE)).toBeUndefined();
