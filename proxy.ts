@@ -1,8 +1,27 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  DEFAULT_SIGNED_IN_PATH,
+  postAuthRedirectCookie,
+  safeRedirectPath,
+} from "@/lib/auth/redirect";
 import { config as appConfig } from "@/lib/config";
 
 const PROTECTED = ["/dashboard"];
+const SIGNED_IN_ONLY = ["/auth/sign-in"];
+
+/** Exact segment match: "/dashboard" covers "/dashboard/x", not "/dashboardish". */
+function matchesPath(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
+/** A redirect is still a response — keep any session cookie refreshed above. */
+function carryingCookies(from: NextResponse, to: NextResponse): NextResponse {
+  for (const cookie of from.cookies.getAll()) {
+    to.cookies.set(cookie);
+  }
+  return to;
+}
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -26,18 +45,41 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-  const isProtected = PROTECTED.some((p) => pathname.startsWith(p));
+  const { pathname, searchParams } = request.nextUrl;
 
-  if (isProtected && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/auth/sign-in";
-    return NextResponse.redirect(url);
+  // No landing page: the root belongs to the app, not to a scaffold notice.
+  if (pathname === "/") {
+    return carryingCookies(
+      response,
+      NextResponse.redirect(new URL(DEFAULT_SIGNED_IN_PATH, request.url)),
+    );
+  }
+
+  if (user && SIGNED_IN_ONLY.some((base) => matchesPath(pathname, base))) {
+    const destination = safeRedirectPath(searchParams.get("redirect"));
+    return carryingCookies(response, NextResponse.redirect(new URL(destination, request.url)));
+  }
+
+  if (!user && PROTECTED.some((base) => matchesPath(pathname, base))) {
+    const destination = safeRedirectPath(`${pathname}${request.nextUrl.search}`);
+
+    const signInUrl = request.nextUrl.clone();
+    signInUrl.pathname = "/auth/sign-in";
+    signInUrl.search = "";
+    signInUrl.searchParams.set("redirect", destination);
+
+    const redirectResponse = carryingCookies(response, NextResponse.redirect(signInUrl));
+    const { name, value, options } = postAuthRedirectCookie(destination);
+    redirectResponse.cookies.set(name, value, options);
+
+    return redirectResponse;
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|_next/data|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest)$).*)",
+  ],
 };

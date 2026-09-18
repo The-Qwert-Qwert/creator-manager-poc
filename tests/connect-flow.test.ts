@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { PLATFORMS, type Platform, type PlatformAdapter } from "@/lib/adapters/types";
 import { getAdapter, hasAdapter, registerAdapter, registerDefaultAdapters } from "@/lib/adapters/registry";
 import { generateState } from "@/lib/auth/state";
+import { POST_AUTH_REDIRECT_COOKIE } from "@/lib/auth/redirect";
 import { decryptToken } from "@/lib/token-crypto";
 import { GET as startHandler } from "@/app/api/auth/[platform]/route";
 import { GET as callbackHandler } from "@/app/api/auth/[platform]/callback/route";
@@ -128,6 +129,7 @@ describe("Connect Flow", () => {
       const redirectLocation = res.headers.get("location");
       expect(redirectLocation).toContain("/auth/sign-in");
       expect(redirectLocation).toContain("redirect=%2Fapi%2Fauth%2Fyoutube");
+      expect(res.cookies.get(POST_AUTH_REDIRECT_COOKIE)?.value).toBe("/api/auth/youtube");
     });
 
     it("starts OAuth flow for YouTube with signed CSRF state", async () => {

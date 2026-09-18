@@ -1,20 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  POST_AUTH_REDIRECT_COOKIE,
+  POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
+  safeRedirectPath,
+} from "@/lib/auth/redirect";
 import { createClient } from "@/lib/supabase/client";
 
+function messageForAuthError(code: string | null): string | null {
+  switch (code) {
+    case "link_expired":
+      return "That sign-in link has expired or has already been used. Send yourself a new one below.";
+    case "exchange_failed":
+      return "We couldn't complete that sign-in. Send yourself a new link below.";
+    case "missing_code":
+      return "That sign-in link was incomplete. Send yourself a new one below.";
+    case null:
+      return null;
+    default:
+      return "We couldn't complete sign-in. Please try again.";
+  }
+}
+
 export default function SignInPage() {
+  return (
+    <Suspense fallback={<div style={styles.pageWrap} />}>
+      <SignInForm />
+    </Suspense>
+  );
+}
+
+function SignInForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayedError = error ?? messageForAuthError(searchParams.get("error"));
   const supabase = createClient();
+  const redirectParam = searchParams.get("redirect");
+
+  /**
+   * The destination travels through Supabase in a cookie, so it has to be in
+   * place before the auth call leaves the browser. With no destination in the
+   * URL, clear any stale one rather than let it hijack this sign-in.
+   */
+  function rememberDestination() {
+    if (!redirectParam) {
+      document.cookie = `${POST_AUTH_REDIRECT_COOKIE}=; path=/; max-age=0`;
+      return;
+    }
+
+    const destination = encodeURIComponent(safeRedirectPath(redirectParam));
+    document.cookie = `${POST_AUTH_REDIRECT_COOKIE}=${destination}; path=/; max-age=${POST_AUTH_REDIRECT_MAX_AGE_SECONDS}; samesite=lax`;
+  }
 
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
     setError(null);
+    rememberDestination();
     setLoading(true);
 
     try {
@@ -38,6 +86,7 @@ export default function SignInPage() {
 
   async function handleGoogle() {
     setError(null);
+    rememberDestination();
     setGoogleLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -91,10 +140,10 @@ export default function SignInPage() {
           </div>
         ) : (
           <>
-            {error && (
+            {displayedError && (
               <div style={styles.errorBanner} role="alert">
                 <span style={styles.errorIcon}>✕</span>
-                <span style={styles.errorText}>{error}</span>
+                <span style={styles.errorText}>{displayedError}</span>
               </div>
             )}
 
