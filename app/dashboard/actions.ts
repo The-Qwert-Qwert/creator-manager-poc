@@ -45,12 +45,14 @@ export async function refreshAccount(formData: FormData): Promise<void> {
     redirect(dashboardPath({ refresh: "failed" }));
   }
 
-  const { supabase } = await requireUser();
+  const { user, supabase } = await requireUser();
 
+  // Scoped to the caller as well as to RLS — the id arrives from the form.
   const { data: account } = await supabase
     .from("connected_accounts")
     .select(REFRESHABLE_COLUMNS)
     .eq("id", accountId)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (!account) {

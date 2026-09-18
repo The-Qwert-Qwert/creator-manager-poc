@@ -4,6 +4,7 @@ import { AdapterError } from "@/lib/adapters/types";
 
 const state = vi.hoisted(() => ({
   account: null as Record<string, unknown> | null,
+  accountFilters: [] as [string, string][],
   accountUpdates: [] as Record<string, unknown>[],
   snapshotUpserts: [] as Record<string, unknown>[],
   fetchProfileCalls: 0,
@@ -14,6 +15,11 @@ const state = vi.hoisted(() => ({
     extras: {},
   }),
 }));
+
+interface AccountQuery {
+  eq(column: string, value: string): AccountQuery;
+  maybeSingle(): Promise<{ data: Record<string, unknown> | null; error: null }>;
+}
 
 class RedirectError extends Error {
   constructor(readonly url: string) {
@@ -50,11 +56,16 @@ vi.mock("@/lib/auth/session", () => ({
       from: (table: string) => {
         if (table === "connected_accounts") {
           return {
-            select: () => ({
-              eq: () => ({
+            select: () => {
+              const query: AccountQuery = {
+                eq(column, value) {
+                  state.accountFilters.push([column, value]);
+                  return query;
+                },
                 maybeSingle: async () => ({ data: state.account, error: null }),
-              }),
-            }),
+              };
+              return query;
+            },
             update: (payload: Record<string, unknown>) => {
               state.accountUpdates.push(payload);
               return { eq: async () => ({ error: null }) };
@@ -114,6 +125,7 @@ async function submit(accountId: string | null = ACCOUNT_ID): Promise<string> {
 describe("refreshAccount", () => {
   beforeEach(() => {
     state.account = storedAccount();
+    state.accountFilters = [];
     state.accountUpdates = [];
     state.snapshotUpserts = [];
     state.fetchProfileCalls = 0;
@@ -186,6 +198,13 @@ describe("refreshAccount", () => {
 
     await expect(submit()).resolves.toBe("/dashboard?refresh=rate_limited&platform=tiktok");
     expect(state.accountUpdates).not.toContainEqual({ status: "needs_reconnect" });
+  });
+
+  it("scopes the account lookup to the caller rather than trusting the form id alone", async () => {
+    await submit();
+
+    expect(state.accountFilters).toContainEqual(["id", ACCOUNT_ID]);
+    expect(state.accountFilters).toContainEqual(["user_id", "user-1"]);
   });
 
   it("ignores an account the caller does not own", async () => {
