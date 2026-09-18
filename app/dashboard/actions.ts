@@ -8,13 +8,10 @@ import { AdapterError, type AdapterErrorCode, type Platform } from "@/lib/adapte
 import { requireUser } from "@/lib/auth/session";
 import { cooldownRemainingMs, MANUAL_REFRESH_COOLDOWN_MS } from "@/lib/dashboard/manual-refresh";
 import { decryptToken } from "@/lib/token-crypto";
+import { decodeBytea } from "@/lib/supabase/bytea";
 
 const REFRESHABLE_COLUMNS =
   "id, platform, external_id, access_token_enc, last_manual_refresh_at";
-
-function decodeBytea(value: string): Buffer {
-  return Buffer.from(value.startsWith("\\x") ? value.slice(2) : value, "hex");
-}
 
 function dashboardPath(params: Record<string, string>): string {
   return `/dashboard?${new URLSearchParams(params).toString()}`;

@@ -3,8 +3,9 @@ import { PLATFORMS, type Platform } from "@/lib/adapters/types";
 import { getAdapter, registerDefaultAdapters } from "@/lib/adapters/registry";
 import { verifyState } from "@/lib/auth/state";
 import { config } from "@/lib/config";
-import { encryptToken } from "@/lib/token-crypto";
+import { encodeBytea } from "@/lib/supabase/bytea";
 import { createClient } from "@/lib/supabase/server";
+import { encryptToken } from "@/lib/token-crypto";
 
 export async function GET(
   request: NextRequest,
@@ -112,7 +113,7 @@ export async function GET(
   // 7. Idempotent upsert (FSD §5 FR-2, CREAT-23 Requirement 4)
   // If provider did not issue a new refresh token on re-connect, preserve the existing one.
   let finalRefreshTokenEnc: string | null = refreshTokenEnc
-    ? `\\x${refreshTokenEnc.toString("hex")}`
+    ? encodeBytea(refreshTokenEnc)
     : null;
 
   if (!refreshTokenEnc) {
@@ -138,7 +139,7 @@ export async function GET(
         external_id: exchangeResult.externalId,
         handle: exchangeResult.handle,
         avatar_url: avatarUrl,
-        access_token_enc: `\\x${accessTokenEnc.toString("hex")}`,
+        access_token_enc: encodeBytea(accessTokenEnc),
         refresh_token_enc: finalRefreshTokenEnc,
         token_expires_at: exchangeResult.tokens.expiresAt
           ? exchangeResult.tokens.expiresAt.toISOString()
