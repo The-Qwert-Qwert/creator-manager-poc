@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { PLATFORMS, type Platform } from "@/lib/adapters/types";
 import { getAdapter, registerDefaultAdapters } from "@/lib/adapters/registry";
 import { generateState } from "@/lib/auth/state";
+import {
+  POST_AUTH_REDIRECT_COOKIE,
+  POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
+  safeRedirectPath,
+} from "@/lib/auth/redirect";
 import { config } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,9 +31,21 @@ export async function GET(
   } = await supabase.auth.getUser();
 
   if (!user) {
+    const destination = safeRedirectPath(`/api/auth/${platform}`);
     const signInUrl = new URL("/auth/sign-in", request.url);
-    signInUrl.searchParams.set("redirect", `/api/auth/${platform}`);
-    return NextResponse.redirect(signInUrl);
+    signInUrl.searchParams.set("redirect", destination);
+
+    // Record the destination so the connect flow resumes after sign-in.
+    const redirectResponse = NextResponse.redirect(signInUrl);
+    redirectResponse.cookies.set(POST_AUTH_REDIRECT_COOKIE, destination, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: POST_AUTH_REDIRECT_MAX_AGE_SECONDS,
+    });
+
+    return redirectResponse;
   }
 
   try {

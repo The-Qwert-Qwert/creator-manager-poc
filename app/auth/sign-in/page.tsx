@@ -1,14 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+function messageForAuthError(code: string | null): string | null {
+  switch (code) {
+    case "exchange_failed":
+      return "That sign-in link has expired or has already been used. Send yourself a new one below.";
+    case "missing_code":
+      return "That sign-in link was incomplete. Send yourself a new one below.";
+    case null:
+      return null;
+    default:
+      return "We couldn't complete sign-in. Please try again.";
+  }
+}
+
 export default function SignInPage() {
+  return (
+    <Suspense fallback={<div style={styles.pageWrap} />}>
+      <SignInForm />
+    </Suspense>
+  );
+}
+
+function SignInForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayedError = error ?? messageForAuthError(searchParams.get("error"));
   const supabase = createClient();
 
   async function handleMagicLink(e: React.FormEvent) {
@@ -91,10 +115,10 @@ export default function SignInPage() {
           </div>
         ) : (
           <>
-            {error && (
+            {displayedError && (
               <div style={styles.errorBanner} role="alert">
                 <span style={styles.errorIcon}>✕</span>
-                <span style={styles.errorText}>{error}</span>
+                <span style={styles.errorText}>{displayedError}</span>
               </div>
             )}
 

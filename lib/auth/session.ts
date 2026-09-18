@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 import { createClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
 
@@ -40,7 +41,7 @@ export async function requireUser(options: RequireUserOptions = {}): Promise<Req
 
   if (error || !user) {
     const dest = options.redirectTo
-      ? `/auth/sign-in?redirect=${encodeURIComponent(options.redirectTo)}`
+      ? `/auth/sign-in?redirect=${encodeURIComponent(safeRedirectPath(options.redirectTo))}`
       : "/auth/sign-in";
     redirect(dest);
   }
