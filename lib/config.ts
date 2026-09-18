@@ -44,4 +44,49 @@ export const config = {
       return requireEnv("GOOGLE_REDIRECT_URI");
     },
   },
+
+  meta: {
+    get graphVersion(): string {
+      return requireEnv("META_GRAPH_VERSION");
+    },
+
+    ig: {
+      get clientId(): string {
+        return requireEnv("META_IG_CLIENT_ID");
+      },
+      get clientSecret(): string {
+        return requireEnv("META_IG_CLIENT_SECRET");
+      },
+      get redirectUri(): string {
+        return requireEnv("META_IG_REDIRECT_URI");
+      },
+    },
+
+    fb: {
+      get clientId(): string {
+        return requireEnv("META_FB_CLIENT_ID");
+      },
+      get clientSecret(): string {
+        return requireEnv("META_FB_CLIENT_SECRET");
+      },
+      get redirectUri(): string {
+        return requireEnv("META_FB_REDIRECT_URI");
+      },
+      get configId(): string | undefined {
+        return process.env.META_FB_CONFIG_ID || undefined;
+      },
+    },
+  },
+
+  tiktok: {
+    get clientKey(): string {
+      return requireEnv("TIKTOK_CLIENT_KEY");
+    },
+    get clientSecret(): string {
+      return requireEnv("TIKTOK_CLIENT_SECRET");
+    },
+    get redirectUri(): string {
+      return requireEnv("TIKTOK_REDIRECT_URI");
+    },
+  },
 } as const;
