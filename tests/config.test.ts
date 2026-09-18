@@ -214,5 +214,43 @@ describe("config", () => {
       });
     });
   });
+
+  describe("tiktok", () => {
+    it("returns clientKey, clientSecret, and redirectUri when set", () => {
+      vi.stubEnv("TIKTOK_CLIENT_KEY", "tiktok-client-key");
+      vi.stubEnv("TIKTOK_CLIENT_SECRET", "tiktok-client-secret");
+      vi.stubEnv(
+        "TIKTOK_REDIRECT_URI",
+        "https://app.example.com/api/auth/tiktok/callback"
+      );
+
+      expect(config.tiktok.clientKey).toBe("tiktok-client-key");
+      expect(config.tiktok.clientSecret).toBe("tiktok-client-secret");
+      expect(config.tiktok.redirectUri).toBe(
+        "https://app.example.com/api/auth/tiktok/callback"
+      );
+    });
+
+    it("throws when TIKTOK_CLIENT_KEY is missing", () => {
+      vi.stubEnv("TIKTOK_CLIENT_KEY", "");
+      expect(() => config.tiktok.clientKey).toThrow(
+        "TIKTOK_CLIENT_KEY is not set"
+      );
+    });
+
+    it("throws when TIKTOK_CLIENT_SECRET is missing", () => {
+      vi.stubEnv("TIKTOK_CLIENT_SECRET", "");
+      expect(() => config.tiktok.clientSecret).toThrow(
+        "TIKTOK_CLIENT_SECRET is not set"
+      );
+    });
+
+    it("throws when TIKTOK_REDIRECT_URI is missing", () => {
+      vi.stubEnv("TIKTOK_REDIRECT_URI", "");
+      expect(() => config.tiktok.redirectUri).toThrow(
+        "TIKTOK_REDIRECT_URI is not set"
+      );
+    });
+  });
 });
 

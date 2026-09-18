@@ -77,4 +77,16 @@ export const config = {
       },
     },
   },
+
+  tiktok: {
+    get clientKey(): string {
+      return requireEnv("TIKTOK_CLIENT_KEY");
+    },
+    get clientSecret(): string {
+      return requireEnv("TIKTOK_CLIENT_SECRET");
+    },
+    get redirectUri(): string {
+      return requireEnv("TIKTOK_REDIRECT_URI");
+    },
+  },
 } as const;
