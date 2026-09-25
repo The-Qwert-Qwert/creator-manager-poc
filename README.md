@@ -26,6 +26,7 @@ Copy `.env.example` to `.env.local` and fill in values as adapters are built.
 
 ```
 app/            App Router pages, layouts, auth callback + sign-in routes
+app/dashboard/  Dashboard route, responsive design stylesheet, theme control, and sparkline
 lib/            token-crypto, adapter types + registry, dashboard metrics, Supabase clients
 tests/          Vitest specs — token-crypto, adapter-registry, platform adapters
                 (YouTube/TikTok/Instagram/Facebook), auth session + state, config,

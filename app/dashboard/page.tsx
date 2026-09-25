@@ -1,8 +1,27 @@
 import { redirect } from "next/navigation";
-import type { CSSProperties } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChartNoAxesColumn,
+  Check,
+  ChevronRight,
+  CircleAlert,
+  CircleCheck,
+  CircleUserRound,
+  Link2,
+  TrendingUp,
+  Clock3,
+  LogOut,
+  Music2,
+  RefreshCw,
+} from "lucide-react";
+
+import type { SVGProps } from "react";
 
 import { refreshAccount } from "./actions";
 import { Sparkline } from "./sparkline";
+import { ThemeToggle } from "./theme-toggle";
+import "./dashboard.css";
 
 import { PLATFORMS, type AccountStatus, type Platform } from "@/lib/adapters/types";
 import { requireUser } from "@/lib/auth/session";
@@ -16,6 +35,7 @@ import {
   SPARKLINE_POINTS,
   buildDashboardMetrics,
   type Delta,
+  type SnapshotPoint,
 } from "@/lib/dashboard/metrics";
 import { cooldownLabel, cooldownRemainingMs } from "@/lib/dashboard/manual-refresh";
 
@@ -27,37 +47,53 @@ interface DashboardPageProps {
 
 interface PlatformMeta {
   name: string;
-  icon: string;
-  iconBg: string;
   audienceLabel: string;
 }
 
 const PLATFORM_INFO: Record<Platform, PlatformMeta> = {
-  youtube: {
-    name: "YouTube",
-    icon: "▶",
-    iconBg: "#dc2626",
-    audienceLabel: "Subscribers",
-  },
-  tiktok: {
-    name: "TikTok",
-    icon: "♪",
-    iconBg: "#000000",
-    audienceLabel: "Followers",
-  },
-  instagram: {
-    name: "Instagram",
-    icon: "IG",
-    iconBg: "linear-gradient(45deg, #f59e0b, #e11d48, #7c3aed)",
-    audienceLabel: "Followers",
-  },
-  facebook: {
-    name: "Facebook",
-    icon: "f",
-    iconBg: "#2563eb",
-    audienceLabel: "Followers",
-  },
+  youtube: { name: "YouTube", audienceLabel: "Subscribers" },
+  tiktok: { name: "TikTok", audienceLabel: "Followers" },
+  instagram: { name: "Instagram", audienceLabel: "Followers" },
+  facebook: { name: "Facebook", audienceLabel: "Followers" },
 };
+
+function PlatformIcon({ platform, size = 21 }: { platform: Platform; size?: number }) {
+  const sharedProps = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+  } satisfies SVGProps<SVGSVGElement>;
+
+  if (platform === "youtube") {
+    return (
+      <svg {...sharedProps} viewBox="0 0 24 24" fill="currentColor">
+        <path d="M21.58 7.19a2.5 2.5 0 0 0-1.76-1.77C18.25 5 12 5 12 5s-6.25 0-7.82.42a2.5 2.5 0 0 0-1.76 1.77A26.1 26.1 0 0 0 2 12a26.1 26.1 0 0 0 .42 4.81 2.5 2.5 0 0 0 1.76 1.77C5.75 19 12 19 12 19s6.25 0 7.82-.42a2.5 2.5 0 0 0 1.76-1.77A26.1 26.1 0 0 0 22 12a26.1 26.1 0 0 0-.42-4.81ZM10 15.02V8.98L15.2 12 10 15.02Z" />
+      </svg>
+    );
+  }
+
+  if (platform === "instagram") {
+    return (
+      <svg {...sharedProps} stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="18" height="18" rx="5" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+
+  if (platform === "facebook") {
+    return (
+      <svg {...sharedProps} fill="currentColor">
+        <path d="M14.2 8.1V6.7c0-.7.5-1 1-1h2.5V2.2L14.5 2C11.4 2 9.9 3.6 9.9 6v2.1H7.3V12h2.6v9.8h4.3V12h2.8l.4-3.9h-3.2V8.1Z" />
+      </svg>
+    );
+  }
+
+  return <Music2 aria-hidden="true" width={size} height={size} strokeWidth={2.2} />;
+}
 
 const STATUS_INFO: Record<AccountStatus, { label: string; tone: "success" | "warning" }> = {
   active: { label: "Active", tone: "success" },
@@ -87,53 +123,127 @@ function formatUpdated(capturedOn: string | null, now: Date): string {
   return `Updated ${days} days ago`;
 }
 
-function DeltaSummary({ delta }: { delta: Delta }) {
+function DeltaSummary({
+  delta,
+  compact = false,
+  className = "",
+}: {
+  delta: Delta;
+  compact?: boolean;
+  className?: string;
+}) {
   if (!delta.available) {
     return (
-      <p style={styles.deltaMuted}>
-        <span aria-hidden="true">{DELTA_PLACEHOLDER}</span> {DELTA_NOTES[delta.reason]}
-      </p>
+      <span className={`delta-pill delta-pill--muted ${className}`}>
+        {DELTA_PLACEHOLDER} <span className="sr-only">{DELTA_NOTES[delta.reason]}</span>
+      </span>
     );
   }
 
-  const direction = delta.value > 0 ? "Up" : delta.value < 0 ? "Down" : "No change";
+  const positive = delta.value > 0;
+  const negative = delta.value < 0;
+  const DeltaIcon = positive ? ArrowUp : negative ? ArrowDown : null;
+  const tone = positive ? "positive" : negative ? "negative" : "neutral";
+  const label = compact
+    ? `${delta.value > 0 ? "+" : delta.value < 0 ? "−" : ""}${Math.abs(delta.value).toLocaleString()} · 7d`
+    : `${delta.value > 0 ? "+" : delta.value < 0 ? "−" : ""}${Math.abs(delta.value).toLocaleString()} vs ${DELTA_WINDOW_DAYS} days ago`;
 
   return (
-    <p
-      style={{
-        ...styles.delta,
-        color:
-          delta.value > 0
-            ? "var(--success)"
-            : delta.value < 0
-              ? "var(--danger)"
-              : "var(--muted)",
-      }}
-    >
-      <span aria-hidden="true">
-        {delta.value > 0 ? "▲ " : delta.value < 0 ? "▼ " : ""}
-        {delta.value > 0 ? "+" : delta.value < 0 ? "−" : ""}
-        {Math.abs(delta.value).toLocaleString()}
+    <span className={`delta-pill delta-pill--${tone} ${className}`}>
+      {DeltaIcon && <DeltaIcon aria-hidden="true" size={compact ? 12 : 15} strokeWidth={2.25} />}
+      <span aria-hidden="true">{label}</span>
+      <span className="sr-only">
+        {positive ? "Up" : negative ? "Down" : "No change"} {Math.abs(delta.value).toLocaleString()} versus {DELTA_WINDOW_DAYS} days ago
       </span>
-      <span style={styles.deltaCaption} aria-hidden="true"> vs {DELTA_WINDOW_DAYS} days ago</span>
-      <span style={styles.srOnly}>{`${direction} ${Math.abs(delta.value).toLocaleString()} versus ${DELTA_WINDOW_DAYS} days ago`}</span>
-    </p>
+    </span>
+  );
+}
+
+function GrowthChip({ delta, currentTotal }: { delta: Delta; currentTotal: number }) {
+  if (!delta.available) {
+    return <span className="delta-pill delta-pill--muted trend-chip">{DELTA_PLACEHOLDER}</span>;
+  }
+
+  const previousTotal = currentTotal - delta.value;
+  if (previousTotal <= 0) {
+    return <span className="delta-pill delta-pill--neutral trend-chip">—</span>;
+  }
+
+  const percentage = (delta.value / previousTotal) * 100;
+  const tone = percentage > 0 ? "positive" : percentage < 0 ? "negative" : "neutral";
+  return (
+    <span className={`delta-pill delta-pill--${tone} trend-chip`}>
+      {percentage > 0 ? "+" : percentage < 0 ? "−" : ""}{Math.abs(percentage).toFixed(1)}%
+      <span className="sr-only">Audience change versus {DELTA_WINDOW_DAYS} days ago</span>
+    </span>
   );
 }
 
 function StatusChip({ status }: { status: AccountStatus }) {
   const info = STATUS_INFO[status];
+  const StatusIcon = info.tone === "success" ? CircleCheck : CircleAlert;
 
   return (
-    <span
-      style={{
-        ...styles.statusChip,
-        color: `var(--${info.tone})`,
-        backgroundColor: `var(--${info.tone}-soft)`,
-      }}
-    >
+    <span className={`status-chip status-chip--${info.tone}`}>
+      <StatusIcon aria-hidden="true" size={13} strokeWidth={2.2} />
       {info.label}
     </span>
+  );
+}
+
+function PlatformBadge({ platform, size = "default" }: { platform: Platform; size?: "default" | "small" | "tiny" }) {
+  const sizeClass = size === "default" ? "" : ` platform-badge--${size}`;
+  const iconSize = size === "default" ? 21 : size === "small" ? 17 : 14;
+
+  return (
+    <span className={`platform-badge platform-badge--${platform}${sizeClass}`} aria-hidden="true">
+      <PlatformIcon platform={platform} size={iconSize} />
+    </span>
+  );
+}
+
+function CombinedTrendChart({ rows }: { rows: readonly { sparkline: SnapshotPoint[] }[] }) {
+  const combinedByDate = new Map<string, number>();
+  for (const row of rows) {
+    for (const point of row.sparkline) {
+      combinedByDate.set(
+        point.capturedOn.slice(0, 10),
+        (combinedByDate.get(point.capturedOn.slice(0, 10)) ?? 0) + point.audienceCount,
+      );
+    }
+  }
+  const points = [...combinedByDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([capturedOn, audienceCount]) => ({ capturedOn, audienceCount }));
+  const chartWidth = 420;
+  const chartHeight = 168;
+
+  if (points.length < 2) {
+    return <div className="sparkline-frame combined-chart-empty" aria-label="Combined audience trend appears after a couple of days." />;
+  }
+
+  const minimum = Math.min(...points.map((point) => point.audienceCount));
+  const maximum = Math.max(...points.map((point) => point.audienceCount));
+  const span = maximum - minimum || 1;
+  const line = points
+    .map((point, index) => {
+      const x = (index / (points.length - 1)) * chartWidth;
+      const y = chartHeight - 4 - ((point.audienceCount - minimum) / span) * (chartHeight - 8);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  return (
+    <svg className="combined-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none" role="img" aria-label="Audience trend across connected platforms over the last 30 days.">
+      <defs>
+        <linearGradient id="combined-chart-gradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--chart-line)" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="var(--chart-line)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon className="combined-chart-area" points={`0,${chartHeight} ${line} ${chartWidth},${chartHeight}`} />
+      <polyline className="combined-chart-line" points={line} />
+    </svg>
   );
 }
 
@@ -152,9 +262,6 @@ export default async function DashboardPage(props: DashboardPageProps) {
   const refreshedPlatform = readParam("refreshed");
   const refreshError = readParam("refresh");
 
-  // FR-4: the dashboard reads our DB only. No platform API is called on render.
-  // One embedded query: each account with its newest snapshots, so an account
-  // whose newest snapshot is older than the sparkline window still shows a value.
   const { data: rawAccounts } = await supabase
     .from("connected_accounts")
     .select(
@@ -165,7 +272,6 @@ export default async function DashboardPage(props: DashboardPageProps) {
     .order("captured_on", { referencedTable: "metric_snapshots", ascending: false })
     .limit(SNAPSHOT_FETCH_LIMIT, { referencedTable: "metric_snapshots" });
 
-  // Flag-gated until Meta approval (CREAT-23)
   const accounts = (rawAccounts ?? []).filter((account) => {
     if (
       !config.features.enableMeta &&
@@ -187,7 +293,6 @@ export default async function DashboardPage(props: DashboardPageProps) {
   });
 
   const now = new Date();
-
   const metrics = buildDashboardMetrics(
     accounts.map((account) => ({
       id: account.id,
@@ -219,259 +324,209 @@ export default async function DashboardPage(props: DashboardPageProps) {
   }
 
   return (
-    <div style={styles.pageWrap}>
-      <main style={styles.card}>
-        <header style={styles.header}>
-          <div>
-            <div style={styles.titleRow}>
-              <h1 style={styles.title}>Creator Analytics</h1>
-              <span style={styles.versionBadge}>PoC v0.1.0</span>
+    <div className="dashboard-page">
+      <div className="dashboard-shell">
+        <header className="app-bar">
+          <div className="app-bar-inner">
+            <div className="brand">
+              <span className="brand-mark"><ChartNoAxesColumn aria-hidden="true" size={20} strokeWidth={2.2} /></span>
+              <div className="brand-copy">
+                <p className="brand-name">Creator Analytics</p>
+                <p className="brand-tagline">All your platforms, one number</p>
+              </div>
             </div>
-            <p style={styles.subtitle}>
-              Signed in as{" "}
-              <strong style={{ color: "var(--foreground)" }}>{user.email}</strong>
-            </p>
+
+            <div className="app-bar-actions">
+              <ThemeToggle />
+              <div className="user-chip">
+                <CircleUserRound aria-hidden="true" size={16} />
+                <span title={user.email}>{user.email}</span>
+              </div>
+              <form action={signOut}>
+                <button type="submit" className="icon-button">
+                  <LogOut aria-hidden="true" size={15} />
+                  Sign out
+                </button>
+              </form>
+            </div>
+            <div className="app-bar-actions mobile-app-actions">
+              <ThemeToggle />
+              <span className="mobile-avatar" aria-hidden="true"><CircleUserRound size={17} /></span>
+            </div>
           </div>
-          <form action={signOut}>
-            <button type="submit" style={styles.signOutBtn}>
-              Sign out
-            </button>
-          </form>
         </header>
 
-        {connectedPlatform && (
-          <div style={styles.bannerSuccess} role="status">
-            <span style={styles.bannerIcon} aria-hidden="true">
-              ✓
-            </span>
-            <div>
-              <strong>Connected!</strong> Successfully connected your{" "}
-              <strong>
-                {PLATFORM_INFO[connectedPlatform as Platform]?.name || connectedPlatform}
-              </strong>{" "}
-              account.
+        <main className="dashboard-content">
+          {(connectedPlatform || refreshedPlatform || refreshError || deniedPlatform || errorParam) && (
+            <div className="feedback-stack">
+              {connectedPlatform && (
+                <div className="feedback-banner feedback-banner--success" role="status">
+                  <Check aria-hidden="true" size={16} />
+                  <div className="banner-copy"><strong>Connected!</strong> Successfully connected your <strong>{PLATFORM_INFO[connectedPlatform as Platform]?.name || connectedPlatform}</strong> account.</div>
+                </div>
+              )}
+              {refreshedPlatform && (
+                <div className="feedback-banner feedback-banner--success" role="status">
+                  <Check aria-hidden="true" size={16} />
+                  <div className="banner-copy"><strong>Refreshed.</strong> Pulled the latest numbers for your <strong>{PLATFORM_INFO[refreshedPlatform as Platform]?.name || refreshedPlatform}</strong> account.</div>
+                </div>
+              )}
+              {refreshError && (
+                <div className="feedback-banner feedback-banner--warning" role="alert">
+                  <CircleAlert aria-hidden="true" size={16} />
+                  <div className="banner-copy">{REFRESH_ERROR_MESSAGES[refreshError] ?? REFRESH_ERROR_MESSAGES.failed}</div>
+                </div>
+              )}
+              {deniedPlatform && (
+                <div className="feedback-banner feedback-banner--warning" role="alert">
+                  <CircleAlert aria-hidden="true" size={16} />
+                  <div className="banner-copy"><strong>Connection cancelled:</strong> Access was denied or cancelled for <strong>{PLATFORM_INFO[deniedPlatform as Platform]?.name || deniedPlatform}</strong>.</div>
+                </div>
+              )}
+              {errorParam && (
+                <div className="feedback-banner feedback-banner--error" role="alert">
+                  <CircleAlert aria-hidden="true" size={16} />
+                  <div className="banner-copy"><strong>Connection error:</strong> {formatErrorMessage(errorParam)}</div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {refreshedPlatform && (
-          <div style={styles.bannerSuccess} role="status">
-            <span style={styles.bannerIcon} aria-hidden="true">
-              ✓
-            </span>
-            <div>
-              <strong>Refreshed.</strong> Pulled the latest numbers for your{" "}
-              <strong>
-                {PLATFORM_INFO[refreshedPlatform as Platform]?.name || refreshedPlatform}
-              </strong>{" "}
-              account.
-            </div>
-          </div>
-        )}
-
-        {refreshError && (
-          <div style={styles.bannerWarning} role="alert">
-            <span style={styles.bannerIcon} aria-hidden="true">
-              ⚠
-            </span>
-            <div>
-              {REFRESH_ERROR_MESSAGES[refreshError] ?? REFRESH_ERROR_MESSAGES.failed}
-            </div>
-          </div>
-        )}
-
-        {deniedPlatform && (
-          <div style={styles.bannerWarning} role="alert">
-            <span style={styles.bannerIcon} aria-hidden="true">
-              ⚠
-            </span>
-            <div>
-              <strong>Connection cancelled:</strong> Access was denied or cancelled for{" "}
-              <strong>
-                {PLATFORM_INFO[deniedPlatform as Platform]?.name || deniedPlatform}
-              </strong>
-              .
-            </div>
-          </div>
-        )}
-
-        {errorParam && (
-          <div style={styles.bannerError} role="alert">
-            <span style={styles.bannerIcon} aria-hidden="true">
-              ✕
-            </span>
-            <div>
-              <strong>Connection error:</strong> {formatErrorMessage(errorParam)}. Please try again.
-            </div>
-          </div>
-        )}
-
-        {/* Combined audience — FSD §6 */}
-        <section style={styles.summary} aria-labelledby="audience-heading">
-          <h2 id="audience-heading" style={styles.summaryLabel}>
-            {metrics.combinedAudienceLabel}
-          </h2>
-          <p style={styles.summaryValue}>
-            {hasAnyAudience ? metrics.combinedAudience.toLocaleString() : DELTA_PLACEHOLDER}
-          </p>
-          <DeltaSummary delta={metrics.delta} />
-          <p style={styles.summaryNote}>{metrics.combinedAudienceNote}</p>
-        </section>
-
-        {/* Per-platform rows — FR-4, FR-6, FR-10 */}
-        <section style={styles.section} aria-labelledby="accounts-heading">
-          <div style={styles.sectionHeaderRow}>
-            <h2 id="accounts-heading" style={styles.sectionTitle}>
-              Your platforms
-            </h2>
-            <span style={styles.countBadge}>
-              {accounts.length} {accounts.length === 1 ? "account" : "accounts"}
-            </span>
+          <div className="audience-layout">
+            <section className="hero-summary" aria-labelledby="audience-heading">
+              <h2 className="eyebrow" id="audience-heading">{metrics.combinedAudienceLabel}</h2>
+              <p className="audience-value">{hasAnyAudience ? metrics.combinedAudience.toLocaleString() : DELTA_PLACEHOLDER}</p>
+              <DeltaSummary delta={metrics.delta} />
+              <p className="audience-note">One person can follow you on more than one platform, so this is a total count, not unique people.</p>
+              <div className="hero-footer"><Clock3 aria-hidden="true" size={13} /> Numbers update once a day, at about 6am.</div>
+            </section>
+            <section className="trend-card trend-panel" aria-label="Growth over the last 30 days">
+              <div className="trend-header">
+                <h3 className="trend-title">Growth, last 30 days</h3>
+                <GrowthChip delta={metrics.delta} currentTotal={metrics.combinedAudience} />
+              </div>
+              <CombinedTrendChart rows={metrics.rows} />
+              <div className="chart-footer"><span>30 days ago</span><span>Today</span></div>
+            </section>
           </div>
 
-          {metrics.rows.length === 0 ? (
-            <div style={styles.emptyState}>
-              <p style={styles.emptyText}>
-                No platforms connected yet. Connect one below — we&apos;ll start recording a
-                daily snapshot from today.
-              </p>
+          <section className="platforms-section" aria-labelledby="accounts-heading">
+            <div className="section-header">
+              <div className="section-heading-copy">
+                <h2 className="section-title" id="accounts-heading">Your platforms</h2>
+                <p className="section-subtitle">Each row is one account. Refresh pulls today&apos;s numbers early.</p>
+              </div>
+              <span className="count-pill">{metrics.rows.length} connected</span>
             </div>
-          ) : (
-            <ul style={styles.accountList}>
-              {metrics.rows.map((row) => {
-                const meta = PLATFORM_INFO[row.platform];
-                const remaining = cooldowns.get(row.id) ?? 0;
-                const isReconnectable = row.status !== "active";
 
-                return (
-                  <li key={row.id} style={styles.accountRow}>
-                    {isReconnectable && (
-                      <div style={styles.reconnectBanner}>
-                        <span style={styles.bannerIcon} aria-hidden="true">
-                          ⚠
-                        </span>
-                        <div style={styles.reconnectCopy}>
-                          <strong>
-                            {meta.name}{" "}
-                            {row.status === "revoked"
-                              ? "access was revoked — reconnect"
-                              : "connection expired — reconnect"}
-                          </strong>
-                          <p style={styles.reconnectNote}>
-                            We keep showing the last numbers we captured until you do.
-                          </p>
+            {metrics.rows.length === 0 ? (
+              <div className="empty-state"><p>No platforms connected yet. Connect one below — we&apos;ll start recording a daily snapshot from today.</p></div>
+            ) : (
+              <ul className="account-list">
+                {metrics.rows.map((row) => {
+                  const meta = PLATFORM_INFO[row.platform];
+                  const remaining = cooldowns.get(row.id) ?? 0;
+                  const isReconnectable = row.status !== "active";
+
+                  return (
+                    <li key={row.id} className={isReconnectable ? "account-card account-card--reconnectable" : "account-card"}>
+                      {isReconnectable && (
+                        <div className="reconnect-banner">
+                          <CircleAlert aria-hidden="true" size={15} />
+                          <div className="reconnect-banner-copy">
+                            <strong>{meta.name} {row.status === "revoked" ? "access was revoked — reconnect" : "connection expired — reconnect"}</strong>
+                            <p>We keep showing the last numbers we captured until you do.</p>
+                          </div>
+                          <a href={`/api/auth/${row.platform}`} className="primary-button" aria-label={`Reconnect ${meta.name}`}>Reconnect</a>
                         </div>
-                        <a
-                          href={`/api/auth/${row.platform}`}
-                          style={styles.buttonPrimary}
-                          aria-label={`Reconnect ${meta.name}`}
-                        >
-                          Reconnect {meta.name}
-                        </a>
+                      )}
+
+                      <div className="account-identity">
+                        <PlatformBadge platform={row.platform} />
+                        <div className="identity-copy">
+                          <p className="platform-name">{meta.name}</p>
+                          <p className="account-handle">{row.handle.startsWith("@") || row.platform === "facebook" ? row.handle : `@${row.handle}`}</p>
+                        </div>
                       </div>
-                    )}
 
-                    <div style={styles.identity}>
-                      <span
-                        style={{ ...styles.platformIcon, background: meta.iconBg }}
-                        aria-hidden="true"
-                      >
-                        {meta.icon}
-                      </span>
-                      <div>
-                        <p style={styles.accountName}>{meta.name}</p>
-                        <p style={styles.accountHandle}>@{row.handle}</p>
+                      <div className="account-metric">
+                        <p className="account-value">{row.audienceCount === null ? DELTA_PLACEHOLDER : row.audienceCount.toLocaleString()}</p>
+                        <p className="audience-label">{meta.audienceLabel}</p>
+                        <DeltaSummary className="mobile-row-delta" delta={row.delta} compact />
                       </div>
-                    </div>
 
-                    <div style={styles.metricBlock}>
-                      <p style={styles.metricValue}>
-                        {row.audienceCount === null ? DELTA_PLACEHOLDER : row.audienceCount.toLocaleString()}
-                      </p>
-                      <p style={styles.metricLabel}>{meta.audienceLabel}</p>
-                      <DeltaSummary delta={row.delta} />
-                    </div>
+                      <div className="account-trend">
+                        <div className="sparkline-frame"><Sparkline points={row.sparkline} platformLabel={meta.name} /></div>
+                        <p className="trend-caption">Last {SPARKLINE_POINTS} days</p>
+                      </div>
 
-                    <div style={styles.trendBlock}>
-                      <Sparkline points={row.sparkline} platformLabel={meta.name} />
-                      <p style={styles.trendCaption}>Last {SPARKLINE_POINTS} days</p>
-                    </div>
+                      <div className="account-status">
+                        <StatusChip status={row.status} />
+                        <p className="updated-time">
+                          {row.lastUpdated ? <time dateTime={row.lastUpdated}>{formatUpdated(row.lastUpdated, now)}</time> : formatUpdated(row.lastUpdated, now)}
+                        </p>
+                        {row.gatedNotice && <p className="gated-notice">{row.gatedNotice}</p>}
+                        <DeltaSummary className="desktop-row-delta" delta={row.delta} compact />
+                      </div>
 
-                    <div style={styles.metaBlock}>
-                      <StatusChip status={row.status} />
-                      <p style={styles.lastUpdated}>
-                        {row.lastUpdated ? (
-                          <time dateTime={row.lastUpdated}>
-                            {formatUpdated(row.lastUpdated, now)}
-                          </time>
-                        ) : (
-                          formatUpdated(row.lastUpdated, now)
-                        )}
-                      </p>
-                      {row.gatedNotice && <p style={styles.gatedNotice}>{row.gatedNotice}</p>}
+                      <div className="account-actions">
+                        <form action={refreshAccount}>
+                          <input type="hidden" name="accountId" value={row.id} />
+                          <button type="submit" disabled={remaining > 0} className="secondary-button icon-button" aria-label={remaining > 0 ? cooldownLabel(remaining) : `Refresh ${meta.name} account now`}>
+                            <RefreshCw aria-hidden="true" size={15} />
+                            {remaining > 0 ? cooldownLabel(remaining) : "Refresh"}
+                          </button>
+                        </form>
+                        <span className="action-hint">Once an hour</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
-                      <form action={refreshAccount} style={styles.refreshForm}>
-                        <input type="hidden" name="accountId" value={row.id} />
-                        <button
-                          type="submit"
-                          disabled={remaining > 0}
-                          style={remaining > 0 ? styles.buttonDisabled : styles.buttonSecondary}
-                          aria-label={remaining > 0 ? cooldownLabel(remaining) : `Refresh ${meta.name} account now`}
-                        >
-                          {remaining > 0 ? cooldownLabel(remaining) : "Refresh now"}
-                        </button>
-                      </form>
+          <section className="connect-section" aria-labelledby="connect-heading">
+            <div className="section-header">
+              <div className="section-heading-copy">
+                <h2 className="section-title" id="connect-heading">Connect another platform</h2>
+                <p className="section-subtitle">One platform is enough to be useful — add more whenever you like.</p>
+              </div>
+            </div>
+            <div className="connect-grid">
+              {connectablePlatforms.map((platform) => {
+                const meta = PLATFORM_INFO[platform];
+                const isConnected = accounts.some((account) => account.platform === platform);
+                return (
+                  <article key={platform} className="connect-card">
+                    <div className="connect-card-header">
+                      <PlatformBadge platform={platform} size="small" />
+                      <strong className="connect-card-name">{meta.name}</strong>
                     </div>
-                  </li>
+                    <div className="connect-card-footer">
+                      {isConnected ? <span className="connected-chip"><Check aria-hidden="true" size={12} /> Connected</span> : <span />}
+                      <a href={`/api/auth/${platform}`} className="icon-button mobile-connect-action" aria-label={isConnected ? `Reconnect ${meta.name}` : `Connect ${meta.name}`}>
+                        {isConnected ? <Link2 aria-hidden="true" className="desktop-connect-icon" size={15} /> : <TrendingUp aria-hidden="true" className="desktop-connect-icon" size={15} />}
+                        <span className="desktop-connect-label">{isConnected ? "Reconnect" : "Connect"}</span>
+                        <span className="mobile-connect-platform"><PlatformBadge platform={platform} size="tiny" /></span>
+                        <span className="mobile-connect-label">{isConnected ? `Reconnect ${meta.name}` : `Connect ${meta.name}`}</span>
+                        <ChevronRight aria-hidden="true" className="mobile-connect-chevron" size={15} />
+                      </a>
+                    </div>
+                  </article>
                 );
               })}
-            </ul>
-          )}
-        </section>
+            </div>
+          </section>
+        </main>
 
-        {/* Connect platforms — CREAT-23 */}
-        <section style={styles.section} aria-labelledby="connect-heading">
-          <div style={styles.sectionHeaderRow}>
-            <h2 id="connect-heading" style={styles.sectionTitle}>
-              Connect more platforms
-            </h2>
+        <footer className="dashboard-footer">
+          <div className="dashboard-footer-inner">
+            <p>Creator Analytics · PoC v0.1.0</p>
+            <div className="footer-links"><span>Privacy</span><span>Terms</span><span>Help</span></div>
           </div>
-          <p style={styles.sectionDesc}>
-            One platform is enough to be useful — connect more whenever you like.
-          </p>
-
-          <div style={styles.connectGrid}>
-            {connectablePlatforms.map((platform) => {
-              const meta = PLATFORM_INFO[platform];
-              const isConnected = accounts.some((account) => account.platform === platform);
-
-              return (
-                <div key={platform} style={styles.connectCard}>
-                  <div style={styles.cardHeader}>
-                    <div style={styles.platformBadgeWrap}>
-                      <span style={{ ...styles.platformIcon, background: meta.iconBg }} aria-hidden="true">
-                        {meta.icon}
-                      </span>
-                      <strong style={styles.platformName}>{meta.name}</strong>
-                    </div>
-                    {isConnected && <span style={styles.connectedBadge}>Connected</span>}
-                  </div>
-
-                  <div style={{ marginTop: "auto", paddingTop: "0.75rem" }}>
-                    <a
-                      href={`/api/auth/${platform}`}
-                      style={isConnected ? styles.reconnectBtn : styles.connectBtn}
-                      aria-label={isConnected ? `Reconnect ${meta.name}` : `Connect ${meta.name}`}
-                    >
-                      {isConnected ? "Reconnect" : `Connect ${meta.name}`}
-                    </a>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </main>
+        </footer>
+      </div>
     </div>
   );
 }
@@ -494,417 +549,3 @@ function formatErrorMessage(code: string): string {
       return code;
   }
 }
-
-const styles = {
-  pageWrap: {
-    maxWidth: 960,
-    margin: "0 auto",
-    padding: "2.5rem 1rem",
-  },
-  card: {
-    backgroundColor: "var(--card)",
-    color: "var(--foreground)",
-    border: "1px solid var(--border)",
-    borderRadius: 16,
-    padding: "1.75rem",
-    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "1.5rem",
-    borderBottom: "1px solid var(--border)",
-    paddingBottom: "1.25rem",
-    flexWrap: "wrap",
-    gap: "1rem",
-  },
-  titleRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-    flexWrap: "wrap",
-  },
-  title: {
-    margin: 0,
-    fontSize: "1.5rem",
-    fontWeight: 700,
-    letterSpacing: "-0.02em",
-  },
-  versionBadge: {
-    fontSize: "0.75rem",
-    fontWeight: 600,
-    padding: "0.15rem 0.5rem",
-    borderRadius: 9999,
-    backgroundColor: "rgba(37, 99, 235, 0.1)",
-    color: "var(--primary)",
-  },
-  subtitle: {
-    margin: "0.35rem 0 0",
-    color: "var(--muted)",
-    fontSize: "0.875rem",
-  },
-  signOutBtn: {
-    minHeight: 44,
-    padding: "0.45rem 0.9rem",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
-    backgroundColor: "transparent",
-    cursor: "pointer",
-    fontSize: "0.8125rem",
-    fontWeight: 500,
-    color: "var(--foreground)",
-  },
-  section: {
-    marginBottom: "2rem",
-  },
-  sectionHeaderRow: {
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: "0.75rem",
-    flexWrap: "wrap",
-  },
-  sectionTitle: {
-    fontSize: "1.125rem",
-    margin: 0,
-    fontWeight: 600,
-  },
-  sectionDesc: {
-    margin: "0.25rem 0 0.85rem",
-    color: "var(--muted)",
-    fontSize: "0.8125rem",
-  },
-  countBadge: {
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-  },
-  summary: {
-    border: "1px solid var(--border)",
-    borderRadius: 14,
-    padding: "1.25rem 1.35rem",
-    backgroundColor: "var(--muted-background)",
-    marginBottom: "2rem",
-  },
-  summaryLabel: {
-    margin: 0,
-    fontSize: "0.875rem",
-    fontWeight: 600,
-    color: "var(--muted)",
-  },
-  summaryValue: {
-    margin: "0.35rem 0 0.15rem",
-    fontSize: "2.75rem",
-    fontWeight: 700,
-    letterSpacing: "-0.03em",
-    lineHeight: 1.1,
-    fontVariantNumeric: "tabular-nums",
-  },
-  summaryNote: {
-    margin: "0.6rem 0 0",
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-    maxWidth: "48ch",
-  },
-  delta: {
-    margin: "0.25rem 0 0",
-    fontSize: "0.875rem",
-    fontWeight: 600,
-  },
-  deltaMuted: {
-    margin: "0.25rem 0 0",
-    fontSize: "0.8125rem",
-    fontWeight: 500,
-    color: "var(--muted)",
-  },
-  deltaCaption: {
-    fontWeight: 400,
-    color: "var(--muted)",
-  },
-  srOnly: {
-    position: "absolute",
-    width: 1,
-    height: 1,
-    padding: 0,
-    margin: -1,
-    overflow: "hidden",
-    clipPath: "inset(50%)",
-    whiteSpace: "nowrap",
-    border: 0,
-  },
-  accountList: {
-    listStyle: "none",
-    margin: "0.85rem 0 0",
-    padding: 0,
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.85rem",
-  },
-  accountRow: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-    gap: "1rem",
-    alignItems: "center",
-    border: "1px solid var(--border)",
-    borderRadius: 14,
-    padding: "1rem 1.15rem",
-  },
-  reconnectBanner: {
-    gridColumn: "1 / -1",
-    display: "flex",
-    alignItems: "center",
-    gap: "0.75rem",
-    flexWrap: "wrap",
-    backgroundColor: "var(--warning-soft)",
-    border: "1px solid var(--warning)",
-    borderRadius: 10,
-    padding: "0.7rem 0.85rem",
-    color: "var(--warning)",
-    fontSize: "0.8125rem",
-  },
-  reconnectCopy: {
-    flex: "1 1 220px",
-  },
-  reconnectNote: {
-    margin: "0.15rem 0 0",
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-  },
-  identity: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.6rem",
-    minWidth: 0,
-  },
-  platformIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    color: "#ffffff",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "0.8125rem",
-    fontWeight: 900,
-    flexShrink: 0,
-  },
-  accountName: {
-    margin: 0,
-    fontWeight: 600,
-    fontSize: "0.9375rem",
-  },
-  accountHandle: {
-    margin: "0.1rem 0 0",
-    fontSize: "0.8125rem",
-    color: "var(--muted)",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  metricBlock: {
-    minWidth: 0,
-  },
-  metricValue: {
-    margin: 0,
-    fontSize: "1.5rem",
-    fontWeight: 700,
-    fontVariantNumeric: "tabular-nums",
-    lineHeight: 1.2,
-  },
-  metricLabel: {
-    margin: "0.1rem 0 0",
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-  },
-  trendBlock: {
-    minWidth: 0,
-  },
-  trendCaption: {
-    margin: "0.3rem 0 0",
-    fontSize: "0.6875rem",
-    color: "var(--muted)",
-  },
-  metaBlock: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: "0.4rem",
-    minWidth: 0,
-  },
-  statusChip: {
-    display: "inline-block",
-    padding: "0.2rem 0.5rem",
-    borderRadius: 9999,
-    fontSize: "0.75rem",
-    fontWeight: 600,
-  },
-  lastUpdated: {
-    margin: 0,
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-  },
-  gatedNotice: {
-    margin: 0,
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-    maxWidth: "42ch",
-  },
-  refreshForm: {
-    marginTop: "0.15rem",
-  },
-  buttonPrimary: {
-    minHeight: 44,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "0.55rem 0.9rem",
-    backgroundColor: "var(--primary-fill)",
-    color: "#ffffff",
-    textDecoration: "none",
-    border: "none",
-    borderRadius: 8,
-    fontWeight: 600,
-    fontSize: "0.8125rem",
-    cursor: "pointer",
-  },
-  buttonSecondary: {
-    minHeight: 44,
-    padding: "0.55rem 0.9rem",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
-    backgroundColor: "transparent",
-    color: "var(--foreground)",
-    fontWeight: 600,
-    fontSize: "0.8125rem",
-    cursor: "pointer",
-  },
-  buttonDisabled: {
-    minHeight: 44,
-    padding: "0.55rem 0.9rem",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
-    backgroundColor: "transparent",
-    color: "var(--muted)",
-    fontWeight: 500,
-    fontSize: "0.8125rem",
-    cursor: "not-allowed",
-  },
-  emptyState: {
-    border: "1px dashed var(--border)",
-    borderRadius: 12,
-    padding: "2.25rem 1rem",
-    textAlign: "center",
-    marginTop: "0.85rem",
-  },
-  emptyText: {
-    margin: 0,
-    fontSize: "0.875rem",
-    color: "var(--muted)",
-  },
-  connectGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: "0.875rem",
-    marginTop: "0.85rem",
-  },
-  connectCard: {
-    border: "1px solid var(--border)",
-    borderRadius: 12,
-    padding: "1rem",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-    backgroundColor: "var(--card)",
-  },
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: "0.5rem",
-  },
-  platformBadgeWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-  },
-  platformName: {
-    fontSize: "0.9375rem",
-    fontWeight: 600,
-  },
-  connectedBadge: {
-    fontSize: "0.7rem",
-    fontWeight: 600,
-    padding: "0.15rem 0.45rem",
-    borderRadius: 9999,
-    backgroundColor: "var(--success-soft)",
-    color: "var(--success)",
-  },
-  connectBtn: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    padding: "0.55rem 0.75rem",
-    backgroundColor: "var(--primary-fill)",
-    color: "#ffffff",
-    textDecoration: "none",
-    borderRadius: 8,
-    fontWeight: 600,
-    fontSize: "0.8125rem",
-  },
-  reconnectBtn: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    padding: "0.55rem 0.75rem",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
-    backgroundColor: "transparent",
-    color: "var(--foreground)",
-    textDecoration: "none",
-    fontWeight: 600,
-    fontSize: "0.8125rem",
-  },
-  bannerSuccess: {
-    backgroundColor: "var(--success-soft)",
-    color: "var(--success)",
-    border: "1px solid var(--success)",
-    borderRadius: 10,
-    padding: "0.75rem 1rem",
-    marginBottom: "1.25rem",
-    display: "flex",
-    alignItems: "center",
-    gap: "0.6rem",
-    fontSize: "0.8125rem",
-  },
-  bannerWarning: {
-    backgroundColor: "var(--warning-soft)",
-    color: "var(--warning)",
-    border: "1px solid var(--warning)",
-    borderRadius: 10,
-    padding: "0.75rem 1rem",
-    marginBottom: "1.25rem",
-    display: "flex",
-    alignItems: "center",
-    gap: "0.6rem",
-    fontSize: "0.8125rem",
-  },
-  bannerError: {
-    backgroundColor: "var(--danger-soft)",
-    color: "var(--danger)",
-    border: "1px solid var(--danger)",
-    borderRadius: 10,
-    padding: "0.75rem 1rem",
-    marginBottom: "1.25rem",
-    display: "flex",
-    alignItems: "center",
-    gap: "0.6rem",
-    fontSize: "0.8125rem",
-  },
-  bannerIcon: {
-    fontSize: "1rem",
-    fontWeight: "bold",
-  },
-} satisfies Record<string, CSSProperties>;
