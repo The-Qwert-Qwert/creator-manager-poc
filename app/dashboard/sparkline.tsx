@@ -1,9 +1,7 @@
-import type { CSSProperties } from "react";
-
 import type { SnapshotPoint } from "@/lib/dashboard/metrics";
 
-const WIDTH = 120;
-const HEIGHT = 32;
+const WIDTH = 200;
+const HEIGHT = 38;
 const PADDING = 3;
 
 interface SparklineProps {
@@ -11,13 +9,13 @@ interface SparklineProps {
   platformLabel: string;
 }
 
-/** FSD §6: a plain line, no axes jargon. Gaps stay gaps — nothing is interpolated. */
+/** Plain trend line with a subtle area fill. Gaps are never interpolated. */
 export function Sparkline({ points, platformLabel }: SparklineProps) {
   const first = points[0];
   const last = points.at(-1);
 
   if (points.length < 2 || !first || !last) {
-    return <p style={styles.empty}>Trend appears once there are a couple of days of history.</p>;
+    return <p className="trend-empty">Trend appears after a couple of days.</p>;
   }
 
   const values = points.map((point) => point.audienceCount);
@@ -29,9 +27,10 @@ export function Sparkline({ points, platformLabel }: SparklineProps) {
   const coords = values.map((value, index) => {
     const x = (index / (values.length - 1)) * WIDTH;
     const y = HEIGHT - PADDING - ((value - min) / span) * plotHeight;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
+    return [x, y] as const;
   });
-
+  const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `0,${HEIGHT} ${line} ${WIDTH},${HEIGHT}`;
   const change = last.audienceCount - first.audienceCount;
   const direction = change === 0 ? "no change" : change > 0 ? "up" : "down";
 
@@ -41,12 +40,13 @@ export function Sparkline({ points, platformLabel }: SparklineProps) {
       preserveAspectRatio="none"
       role="img"
       aria-label={`${platformLabel} audience across the last ${points.length} snapshots: from ${first.audienceCount.toLocaleString()} to ${last.audienceCount.toLocaleString()}, ${direction} ${Math.abs(change).toLocaleString()}.`}
-      style={styles.svg}
+      className="sparkline"
     >
+      <polygon className="sparkline-area" points={area} />
       <polyline
-        points={coords.join(" ")}
+        className="sparkline-line"
+        points={line}
         fill="none"
-        stroke="var(--primary)"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -55,16 +55,3 @@ export function Sparkline({ points, platformLabel }: SparklineProps) {
     </svg>
   );
 }
-
-const styles = {
-  svg: {
-    display: "block",
-    width: "100%",
-    height: HEIGHT,
-  },
-  empty: {
-    margin: 0,
-    fontSize: "0.75rem",
-    color: "var(--muted)",
-  },
-} satisfies Record<string, CSSProperties>;
