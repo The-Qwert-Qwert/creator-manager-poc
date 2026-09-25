@@ -522,7 +522,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
         <footer className="dashboard-footer">
           <div className="dashboard-footer-inner">
-            <p>Creator Analytics · PoC v0.1.0</p>
+            <p>Creator Analytics · PoC v0.1.1</p>
             <div className="footer-links"><span>Privacy</span><span>Terms</span><span>Help</span></div>
           </div>
         </footer>
